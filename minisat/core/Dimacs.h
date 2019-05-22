@@ -57,6 +57,7 @@ static void parse_DIMACS_main(B& in, Solver& S, bool strictp = false) {
             if (eagerMatch(in, "p cnf")){
                 vars    = parseInt(in);
                 clauses = parseInt(in);
+                (void) vars;
                 // SATRACE'06 hack
                 // if (clauses > 4000000)
                 //     S.eliminate(true);
