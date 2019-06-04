@@ -3,7 +3,7 @@
 This repository contains various forks and patches of MiniSat
 written by various authors over the years.
 [The original MiniSat][homepage] is written and
-Copyright ⓒ 2003-2006 Niklas Eén, Copyright ⓒ 2003-2010 Niklas Sörensson,
+Copyright © 2003-2006 Niklas Eén, Copyright © 2003-2010 Niklas Sörensson,
 and distributed under the terms of [the MIT license.][license_mit]
 
 In the [master branch,][master] a version based on [Niklas's most recent work][upstream]
