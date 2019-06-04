@@ -1,12 +1,32 @@
-/*****************************************************************************************[Main.cc]
- Glucose -- Copyright (c) 2009, Gilles Audemard, Laurent Simon
-				CRIL - Univ. Artois, France
-				LRI  - Univ. Paris Sud, France
- 
-Glucose sources are based on MiniSat (see below MiniSat copyrights). Permissions and copyrights of
-Glucose are exactly the same as Minisat on which it is based on. (see below).
+/***************************************************************************************[Main.cc]
+ Glucose -- Copyright (c) 2009-2014, Gilles Audemard, Laurent Simon
+                                CRIL - Univ. Artois, France
+                                LRI  - Univ. Paris Sud, France (2009-2013)
+                                Labri - Univ. Bordeaux, France
 
----------------
+ Syrup (Glucose Parallel) -- Copyright (c) 2013-2014, Gilles Audemard, Laurent Simon
+                                CRIL - Univ. Artois, France
+                                Labri - Univ. Bordeaux, France
+
+Glucose sources are based on MiniSat (see below MiniSat copyrights). Permissions and copyrights of
+Glucose (sources until 2013, Glucose 3.0, single core) are exactly the same as Minisat on which it 
+is based on. (see below).
+
+Glucose-Syrup sources are based on another copyright. Permissions and copyrights for the parallel
+version of Glucose-Syrup (the "Software") are granted, free of charge, to deal with the Software
+without restriction, including the rights to use, copy, modify, merge, publish, distribute,
+sublicence, and/or sell copies of the Software, and to permit persons to whom the Software is 
+furnished to do so, subject to the following conditions:
+
+- The above and below copyrights notices and this permission notice shall be included in all
+copies or substantial portions of the Software;
+- The parallel version of Glucose (all files modified since Glucose 3.0 releases, 2013) cannot
+be used in any competitive event (sat competitions/evaluations) without the express permission of 
+the authors (Gilles Audemard / Laurent Simon). This is also the case for any competitive event
+using Glucose Parallel as an embedded SAT engine (single core or not).
+
+
+--------------- Original Minisat Copyrights
 
 Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
 Copyright (c) 2007-2010, Niklas Sorensson
@@ -25,7 +45,7 @@ NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPO
 NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-**************************************************************************************************/
+ **************************************************************************************************/
 
 #include <errno.h>
 
@@ -43,25 +63,26 @@ using namespace Glucose;
 
 //=================================================================================================
 
+static const char* _certified = "CORE -- CERTIFIED UNSAT";
 
 void printStats(Solver& solver)
 {
     double cpu_time = cpuTime();
     double mem_used = 0;//memUsedPeak();
-    printf("c restarts              : %"PRIu64" (%"PRIu64" conflicts in avg)\n", solver.starts,(solver.starts>0 ?solver.conflicts/solver.starts : 0));
-    printf("c blocked restarts      : %"PRIu64" (multiple: %"PRIu64") \n", solver.nbstopsrestarts,solver.nbstopsrestartssame);
-    printf("c last block at restart : %"PRIu64"\n",solver.lastblockatrestart);
-    printf("c nb ReduceDB           : %lld\n", solver.nbReduceDB);
-    printf("c nb removed Clauses    : %lld\n",solver.nbRemovedClauses);
-    printf("c nb learnts DL2        : %lld\n", solver.nbDL2);
-    printf("c nb learnts size 2     : %lld\n", solver.nbBin);
-    printf("c nb learnts size 1     : %lld\n", solver.nbUn);
+    printf("c restarts              : %" PRIu64" (%" PRIu64" conflicts in avg)\n", solver.starts,(solver.starts>0 ?solver.conflicts/solver.starts : 0));
+    printf("c blocked restarts      : %" PRIu64" (multiple: %" PRIu64") \n", solver.nbstopsrestarts,solver.nbstopsrestartssame);
+    printf("c last block at restart : %" PRIu64"\n",solver.lastblockatrestart);
+    printf("c nb ReduceDB           : %" PRIu64"\n", solver.nbReduceDB);
+    printf("c nb removed Clauses    : %" PRIu64"\n",solver.nbRemovedClauses);
+    printf("c nb learnts DL2        : %" PRIu64"\n", solver.nbDL2);
+    printf("c nb learnts size 2     : %" PRIu64"\n", solver.nbBin);
+    printf("c nb learnts size 1     : %" PRIu64"\n", solver.nbUn);
 
-    printf("c conflicts             : %-12"PRIu64"   (%.0f /sec)\n", solver.conflicts   , solver.conflicts   /cpu_time);
-    printf("c decisions             : %-12"PRIu64"   (%4.2f %% random) (%.0f /sec)\n", solver.decisions, (float)solver.rnd_decisions*100 / (float)solver.decisions, solver.decisions   /cpu_time);
-    printf("c propagations          : %-12"PRIu64"   (%.0f /sec)\n", solver.propagations, solver.propagations/cpu_time);
-    printf("c conflict literals     : %-12"PRIu64"   (%4.2f %% deleted)\n", solver.tot_literals, (solver.max_literals - solver.tot_literals)*100 / (double)solver.max_literals);
-    printf("c nb reduced Clauses    : %lld\n",solver.nbReducedClauses);
+    printf("c conflicts             : %-12" PRIu64"   (%.0f /sec)\n", solver.conflicts   , solver.conflicts   /cpu_time);
+    printf("c decisions             : %-12" PRIu64"   (%4.2f %% random) (%.0f /sec)\n", solver.decisions, (float)solver.rnd_decisions*100 / (float)solver.decisions, solver.decisions   /cpu_time);
+    printf("c propagations          : %-12" PRIu64"   (%.0f /sec)\n", solver.propagations, solver.propagations/cpu_time);
+    printf("c conflict literals     : %-12" PRIu64"   (%4.2f %% deleted)\n", solver.tot_literals, (solver.max_literals - solver.tot_literals)*100 / (double)solver.max_literals);
+    printf("c nb reduced Clauses    : %" PRIu64"\n",solver.nbReducedClauses);
     
     if (mem_used != 0) printf("Memory used           : %.2f MB\n", mem_used);
     printf("c CPU time              : %g s\n", cpu_time);
@@ -91,7 +112,8 @@ static void SIGINT_exit(int signum) {
 int main(int argc, char** argv)
 {
     try {
-      printf("c\nc This is glucose 3.0 --  based on MiniSAT (Many thanks to MiniSAT team)\nc Simplification mode is turned on\nc\n");
+      printf("c\nc This is glucose 4.0 --  based on MiniSAT (Many thanks to MiniSAT team)\nc\n");
+
       
       setUsageHelp("c USAGE: %s [options] <input-file> <result-output-file>\n\n  where input may be either in plain or gzipped DIMACS.\n");
         
@@ -99,7 +121,7 @@ int main(int argc, char** argv)
 #if defined(__linux__)
         fpu_control_t oldcw, newcw;
         _FPU_GETCW(oldcw); newcw = (oldcw & ~_FPU_EXTENDED) | _FPU_DOUBLE; _FPU_SETCW(newcw);
-        printf("WARNING: for repeatability, setting FPU to use double precision\n");
+        //printf("c WARNING: for repeatability, setting FPU to use double precision\n");
 #endif
         // Extra options:
         //
@@ -110,23 +132,39 @@ int main(int argc, char** argv)
         StringOption dimacs ("MAIN", "dimacs", "If given, stop after preprocessing and write the result to this file.");
         IntOption    cpu_lim("MAIN", "cpu-lim","Limit on CPU time allowed in seconds.\n", INT32_MAX, IntRange(0, INT32_MAX));
         IntOption    mem_lim("MAIN", "mem-lim","Limit on memory usage in megabytes.\n", INT32_MAX, IntRange(0, INT32_MAX));
+ //       BoolOption opt_incremental ("MAIN","incremental", "Use incremental SAT solving",false);
 
+         BoolOption    opt_certified      (_certified, "certified",    "Certified UNSAT using DRUP format", false);
+         StringOption  opt_certified_file      (_certified, "certified-output",    "Certified UNSAT output file", "NULL");
+         
         parseOptions(argc, argv, true);
         
         SimpSolver  S;
         double      initial_time = cpuTime();
 
         S.parsing = 1;
-        if (!pre) S.eliminate(true);
+        //if (!pre) S.eliminate(true);
 
         S.verbosity = verb;
         S.verbEveryConflicts = vv;
 	S.showModel = mod;
+        
+        S.certifiedUNSAT = opt_certified;
+        if(S.certifiedUNSAT) {
+            if(!strcmp(opt_certified_file,"NULL")) {
+            S.certifiedOutput =  fopen("/dev/stdout", "wb");
+            } else {
+                S.certifiedOutput =  fopen(opt_certified_file, "wb");	    
+            }
+            fprintf(S.certifiedOutput,"o proof DRUP\n");
+        }
+
         solver = &S;
         // Use signal handlers that forcibly quit until the solver will be able to respond to
         // interrupts:
         signal(SIGINT, SIGINT_exit);
         signal(SIGXCPU,SIGINT_exit);
+
 
         // Set limit on CPU-time:
         if (cpu_lim != INT32_MAX){
@@ -135,7 +173,7 @@ int main(int argc, char** argv)
             if (rl.rlim_max == RLIM_INFINITY || (rlim_t)cpu_lim < rl.rlim_max){
                 rl.rlim_cur = cpu_lim;
                 if (setrlimit(RLIMIT_CPU, &rl) == -1)
-                    printf("WARNING! Could not set resource limit: CPU-time.\n");
+                    printf("c WARNING! Could not set resource limit: CPU-time.\n");
             } }
 
         // Set limit on virtual memory:
@@ -146,11 +184,11 @@ int main(int argc, char** argv)
             if (rl.rlim_max == RLIM_INFINITY || new_mem_lim < rl.rlim_max){
                 rl.rlim_cur = new_mem_lim;
                 if (setrlimit(RLIMIT_AS, &rl) == -1)
-                    printf("WARNING! Could not set resource limit: Virtual memory.\n");
+                    printf("c WARNING! Could not set resource limit: Virtual memory.\n");
             } }
         
         if (argc == 1)
-            printf("Reading from standard input... Use '--help' for help.\n");
+            printf("c Reading from standard input... Use '--help' for help.\n");
 
         gzFile in = (argc == 1) ? gzdopen(0, "rb") : gzopen(argv[1], "rb");
         if (in == NULL)
@@ -179,12 +217,15 @@ int main(int argc, char** argv)
         signal(SIGXCPU,SIGINT_interrupt);
 
         S.parsing = 0;
-        S.eliminate(true);
+        if(pre/* && !S.isIncremental()*/) {
+	  printf("c | Preprocesing is fully done\n");
+	  S.eliminate(true);
         double simplified_time = cpuTime();
         if (S.verbosity > 0){
             printf("c |  Simplification time:  %12.2f s                                                                 |\n", simplified_time - parsed_time);
-            printf("c |                                                                                                       |\n"); }
-
+ }
+	}
+	printf("c |                                                                                                       |\n");
         if (!S.okay()){
             if (S.certifiedUNSAT) fprintf(S.certifiedOutput, "0\n"), fclose(S.certifiedOutput);
             if (res != NULL) fprintf(res, "UNSAT\n"), fclose(res);
@@ -193,7 +234,7 @@ int main(int argc, char** argv)
                printf("Solved by simplification\n");
                 printStats(S);
                 printf("\n"); }
-            printf("s UNSATISFIABLE\n");
+            printf("s UNSATISFIABLE\n");        
             exit(20);
         }
 
@@ -223,7 +264,7 @@ int main(int argc, char** argv)
                 fprintf(res, " 0\n");
             } else {
 	      if (ret == l_False){
-		fprintf(res, "UNSAT\n"), fclose(res);
+		fprintf(res, "UNSAT\n");
 	      }
 	    }
             fclose(res);
@@ -237,6 +278,8 @@ int main(int argc, char** argv)
 	  }
 
 	}
+
+        if (S.certifiedUNSAT) fprintf(S.certifiedOutput, "0\n"), fclose(S.certifiedOutput);
 
 #ifdef NDEBUG
         exit(ret == l_True ? 10 : ret == l_False ? 20 : 0);     // (faster than "return", which will invoke the destructor for 'Solver')
