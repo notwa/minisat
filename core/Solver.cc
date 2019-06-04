@@ -83,6 +83,7 @@ Solver::Solver() :
   , dec_vars(0), clauses_literals(0), learnts_literals(0), max_literals(0), tot_literals(0)
 
   , ok                 (true)
+  , local_learnts_dirty(false)
   , cla_inc            (1)
   , var_inc            (1)
   , watches_bin        (WatcherDeleted(ca))
@@ -97,9 +98,6 @@ Solver::Solver() :
   , global_lbd_sum     (0)
   , lbd_queue          (50)
   , trail_sz_queue     (5000)
-  , reduce_round       (1)
-  , reduce_base        (2000)
-  , next_reduce_at     (reduce_base)
   
   , counter            (0)
 
@@ -300,7 +298,7 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& ou
             Lit tmp = c[0];
             c[0] = c[1], c[1] = tmp; }
 
-        if (c.learnt())
+        if (c.learnt() && c.mark() == LOCAL)
             claBumpActivity(c);
 
         // Update LBD if improved.
@@ -308,7 +306,12 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& ou
             int lbd = computeLBD(c);
             if (lbd + 1 < c.lbd()){
                 if (c.lbd() <= 30) c.removable(false); // Protect once from reduction.
-                c.set_lbd(lbd); }
+                c.set_lbd(lbd);
+                if (lbd <= 5 && c.mark() == LOCAL){
+                    learnts_core.push(confl);
+                    local_learnts_dirty = true;
+                    c.mark(CORE); }
+            }
         }
 
         for (int j = (p == lit_Undef) ? 0 : 1; j < c.size(); j++){
@@ -625,38 +628,28 @@ ExitProp:;
 struct reduceDB_lt { 
     ClauseAllocator& ca;
     reduceDB_lt(ClauseAllocator& ca_) : ca(ca_) {}
-    bool operator () (CRef x, CRef y) { 
-        if (ca[x].size() == 2) return 0;
-        if (ca[y].size() == 2) return 1;
-
-        if (ca[x].lbd() > ca[y].lbd()) return 1;
-        if (ca[x].lbd() < ca[y].lbd()) return 0;    
-    
-        return ca[x].activity() < ca[y].activity();
-    }    
+    bool operator () (CRef x, CRef y) const { return ca[x].activity() < ca[y].activity(); }
 };
 void Solver::reduceDB()
 {
     int     i, j;
 
-    sort(learnts, reduceDB_lt(ca));
+    sort(learnts_local, reduceDB_lt(ca));
 
-    if (ca[learnts[learnts.size() / 2]].lbd() <= 3) reduce_base += 1000;
-#ifdef REDUCE_BASE_BUG
-    if (ca[learnts.last()].lbd() > 5) reduce_base -= 1000;
-#endif
-
-    int limit = learnts.size() / 2;
-    for (i = j = 0; i < learnts.size(); i++){
-        Clause& c = ca[learnts[i]];
-        if (c.size() > 2 && c.lbd() > 2 && c.removable() && !locked(c) && i < limit)
-            removeClause(learnts[i]);
-        else{
-            if (!c.removable()) limit++;
-            c.removable(true);
-            learnts[j++] = learnts[i]; }
+    int limit = learnts_local.size() / 2;
+    for (i = j = 0; i < learnts_local.size(); i++){
+        Clause& c = ca[learnts_local[i]];
+        if (c.mark() == LOCAL)
+            if (c.removable() && !locked(c) && i < limit)
+                removeClause(learnts_local[i]);
+            else{
+                if (!c.removable()) limit++;
+                c.removable(true);
+                learnts_local[j++] = learnts_local[i]; }
     }
-    learnts.shrink(i - j);
+    learnts_local.shrink(i - j);
+    local_learnts_dirty = false;
+
     checkGarbage();
 }
 
@@ -693,6 +686,14 @@ void Solver::rebuildOrderHeap()
 |    Simplify the clause database according to the current top-level assigment. Currently, the only
 |    thing done here is the removal of satisfied clauses, but more things can be put here.
 |________________________________________________________________________________________________@*/
+void Solver::cleanLearnts(vec<CRef>& learnts, unsigned valid_mark)
+{
+    int i, j;
+    for (i = j = 0; i < learnts.size(); i++)
+        if (ca[learnts[i]].mark() == valid_mark)
+            learnts[j++] = learnts[i];
+    learnts.shrink(i - j);
+}
 bool Solver::simplify()
 {
     assert(decisionLevel() == 0);
@@ -703,8 +704,12 @@ bool Solver::simplify()
     if (nAssigns() == simpDB_assigns || (simpDB_props > 0))
         return true;
 
+    if (local_learnts_dirty) cleanLearnts(learnts_local, LOCAL);
+    local_learnts_dirty = false;
+
     // Remove satisfied clauses:
-    removeSatisfied(learnts);
+    removeSatisfied(learnts_core);
+    removeSatisfied(learnts_local);
     if (remove_satisfied)        // Can be turned off.
         removeSatisfied(clauses);
     checkGarbage();
@@ -767,9 +772,13 @@ lbool Solver::search(int nof_conflicts)
             }else{
                 CRef cr = ca.alloc(learnt_clause, true);
                 ca[cr].set_lbd(lbd);
-                learnts.push(cr);
+                if (lbd <= 5){
+                    learnts_core.push(cr);
+                    ca[cr].mark(CORE);
+                }else{
+                    learnts_local.push(cr);
+                    claBumpActivity(ca[cr]); }
                 attachClause(cr);
-                claBumpActivity(ca[cr]);
                 uncheckedEnqueue(learnt_clause[0], cr);
             }
 
@@ -801,9 +810,8 @@ lbool Solver::search(int nof_conflicts)
             if (decisionLevel() == 0 && !simplify())
                 return l_False;
 
-            if (conflicts >= next_reduce_at){
+            if (learnts_local.size() > 20000)
                 reduceDB();
-                next_reduce_at = (++reduce_round) * (reduce_base += 1300); }
 
             Lit next = lit_Undef;
             while (decisionLevel() < assumptions.size()){
@@ -1039,8 +1047,10 @@ void Solver::relocAll(ClauseAllocator& to)
 
     // All learnt:
     //
-    for (int i = 0; i < learnts.size(); i++)
-        ca.reloc(learnts[i], to);
+    for (int i = 0; i < learnts_core.size(); i++)
+        ca.reloc(learnts_core[i], to);
+    for (int i = 0; i < learnts_local.size(); i++)
+        ca.reloc(learnts_local[i], to);
 
     // All original:
     //

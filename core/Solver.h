@@ -29,16 +29,12 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 //#define WIDE_WALK
 //#define EXTRA_VAR_ACT_BUMP
 //#define INT_QUEUE_AVG
-//#define REDUCE_BASE_BUG
-//#define ZERO_LEVEL_LBD
 //#define LOOSE_PROP_STAT
 
 #ifdef GLUCOSE23
   #define WIDE_WALK
   #define EXTRA_VAR_ACT_BUMP
   #define INT_QUEUE_AVG
-  #define REDUCE_BASE_BUG
-  #define ZERO_LEVEL_LBD
   #define LOOSE_PROP_STAT
 #endif
 
@@ -48,6 +44,10 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "utils/Options.h"
 #include "core/SolverTypes.h"
 
+
+// Don't change the actual numbers.
+#define LOCAL 0
+#define CORE  3
 
 namespace Minisat {
 
@@ -216,7 +216,9 @@ protected:
     //
     bool                ok;               // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
     vec<CRef>           clauses;          // List of problem clauses.
-    vec<CRef>           learnts;          // List of learnt clauses.
+    vec<CRef>           learnts_core,     // List of learnt clauses.
+                        learnts_local;
+    bool                local_learnts_dirty;
     double              cla_inc;          // Amount to bump next clause with.
     vec<double>         activity;         // A heuristic measurement of the activity of a variable.
     double              var_inc;          // Amount to bump next variable with.
@@ -240,9 +242,6 @@ protected:
     float               global_lbd_sum;
     MyQueue<int>        lbd_queue;        // For computing moving averages of recent LBD values.
     MyQueue<int>        trail_sz_queue;   // Ditto, but for recent trail sizes (i.e., number of assigned variables).
-    int                 reduce_round;
-    uint64_t            reduce_base;      // Determines the next time of reduction.
-    uint64_t            next_reduce_at;
 
     ClauseAllocator     ca;
 
@@ -285,6 +284,7 @@ protected:
     void     removeSatisfied  (vec<CRef>& cs);                                         // Shrink 'cs' to contain only non-satisfied clauses.
     void     rebuildOrderHeap ();
     bool     binResMinimize   (vec<Lit>& out_learnt);                                  // Further learnt clause minimization by binary resolution.
+    void     cleanLearnts     (vec<CRef>& learnts, unsigned valid_mark);
 
     // Maintaining Variable/Clause activity:
     //
@@ -319,11 +319,7 @@ protected:
         counter++;
         for (int i = 0; i < c.size(); i++){
             int l = level(var(c[i]));
-#ifdef ZERO_LEVEL_LBD
-            if (seen2[l] != counter){
-#else
             if (l != 0 && seen2[l] != counter){
-#endif
                 seen2[l] = counter;
                 lbd++; } }
 
@@ -372,8 +368,8 @@ inline void Solver::claDecayActivity() { cla_inc *= (1 / clause_decay); }
 inline void Solver::claBumpActivity (Clause& c) {
         if ( (c.activity() += cla_inc) > 1e20 ) {
             // Rescale:
-            for (int i = 0; i < learnts.size(); i++)
-                ca[learnts[i]].activity() *= 1e-20;
+            for (int i = 0; i < learnts_local.size(); i++)
+                ca[learnts_local[i]].activity() *= 1e-20;
             cla_inc *= 1e-20; } }
 
 inline void Solver::checkGarbage(void){ return checkGarbage(garbage_frac); }
@@ -402,7 +398,7 @@ inline lbool    Solver::modelValue    (Var x) const   { return model[x]; }
 inline lbool    Solver::modelValue    (Lit p) const   { return model[var(p)] ^ sign(p); }
 inline int      Solver::nAssigns      ()      const   { return trail.size(); }
 inline int      Solver::nClauses      ()      const   { return clauses.size(); }
-inline int      Solver::nLearnts      ()      const   { return learnts.size(); }
+inline int      Solver::nLearnts      ()      const   { return learnts_core.size() + learnts_local.size(); }
 inline int      Solver::nVars         ()      const   { return vardata.size(); }
 inline int      Solver::nFreeVars     ()      const   { return (int)dec_vars - (trail_lim.size() == 0 ? trail.size() : trail_lim[0]); }
 inline void     Solver::setPolarity   (Var v, bool b) { polarity[v] = b; }
