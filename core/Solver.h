@@ -23,6 +23,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef Minisat_Solver_h
 #define Minisat_Solver_h
 
+#define BIN_DRUP
+
 #define GLUCOSE23
 //#define EXTRA_VAR_ACT_BUMP
 //#define INT_QUEUE_AVG
@@ -98,7 +100,7 @@ public:
 
     // Solving:
     //
-    bool    simplify     ();                        // Removes already satisfied clauses.
+    bool    simplify     (bool do_stamping = false); // Removes already satisfied clauses.
     bool    solve        (const vec<Lit>& assumps); // Search for a model that respects a given set of assumptions.
     lbool   solveLimited (const vec<Lit>& assumps); // Search for a model that respects a given set of assumptions (With resource constraints).
     bool    solve        ();                        // Search without assumptions.
@@ -156,6 +158,7 @@ public:
 
     // Mode of operation:
     //
+    FILE*     drup_file;
     int       verbosity;
     double    var_decay_no_r;
     double    var_decay_glue_r;
@@ -217,8 +220,6 @@ protected:
     vec<CRef>           learnts_core,     // List of learnt clauses.
                         learnts_tier2,
                         learnts_local;
-    bool                tier2_learnts_dirty,
-                        local_learnts_dirty;
     double              cla_inc;          // Amount to bump next clause with.
     vec<double>         activity_no_r,    // A heuristic measurement of the activity of a variable.
                         activity_glue_r;
@@ -258,6 +259,7 @@ protected:
     vec<Lit>            analyze_stack;
     vec<Lit>            analyze_toclear;
     vec<Lit>            add_tmp;
+    vec<Lit>            add_oc;
 
     vec<uint64_t>       seen2;    // Mostly for efficient LBD computation. 'seen2[i]' will indicate if decision level or variable 'i' has been seen.
     uint64_t            counter;  // Simple counter for marking purpose with 'seen2'.
@@ -289,9 +291,9 @@ protected:
     void     reduceDB         ();                                                      // Reduce the set of learnt clauses.
     void     reduceDB_Tier2   ();
     void     removeSatisfied  (vec<CRef>& cs);                                         // Shrink 'cs' to contain only non-satisfied clauses.
+    void     safeRemoveSatisfiedCompact(vec<CRef>& cs, unsigned valid_mark);
     void     rebuildOrderHeap ();
     bool     binResMinimize   (vec<Lit>& out_learnt);                                  // Further learnt clause minimization by binary resolution.
-    void     cleanLearnts     (vec<CRef>& learnts, unsigned valid_mark);
 
     // Maintaining Variable/Clause activity:
     //
@@ -305,6 +307,7 @@ protected:
     void     attachClause     (CRef cr);               // Attach a clause to watcher lists.
     void     detachClause     (CRef cr, bool strict = false); // Detach a clause to watcher lists.
     void     removeClause     (CRef cr);               // Detach and free a clause.
+    void     removeClauseHack (CRef cr, Lit watched0, Lit watched1);
     bool     locked           (const Clause& c) const; // Returns TRUE if a clause is a reason for some implication in the current state.
     bool     satisfied        (const Clause& c) const; // Returns TRUE if a clause is satisfied in the current state.
 
@@ -332,6 +335,43 @@ protected:
         return lbd;
     }
 
+#ifdef BIN_DRUP
+    static int buf_len;
+    static unsigned char drup_buf[];
+    static unsigned char* buf_ptr;
+
+    static inline void byteDRUP(Lit l){
+        unsigned int u = 2 * (var(l) + 1) + sign(l);
+        do{
+            *buf_ptr++ = u & 0x7f | 0x80; buf_len++;
+            u = u >> 7;
+        }while (u);
+        *(buf_ptr - 1) &= 0x7f; // End marker of this unsigned number.
+    }
+
+    template<class V>
+    static inline void binDRUP(unsigned char op, const V& c, FILE* drup_file){
+        assert(op == 'a' || op == 'd');
+        *buf_ptr++ = op; buf_len++;
+        for (int i = 0; i < c.size(); i++) byteDRUP(c[i]);
+        *buf_ptr++ = 0; buf_len++;
+        if (buf_len > 1048576) binDRUP_flush(drup_file);
+    }
+
+    static inline void binDRUP_strengthen(const Clause& c, Lit l, FILE* drup_file){
+        *buf_ptr++ = 'a'; buf_len++;
+        for (int i = 0; i < c.size(); i++)
+            if (c[i] != l) byteDRUP(c[i]);
+        *buf_ptr++ = 0; buf_len++;
+        if (buf_len > 1048576) binDRUP_flush(drup_file);
+    }
+
+    static inline void binDRUP_flush(FILE* drup_file){
+        fwrite_unlocked(drup_buf, sizeof(unsigned char), buf_len, drup_file);
+        buf_ptr = drup_buf; buf_len = 0;
+    }
+#endif
+
     // Static helpers:
     //
 
@@ -345,6 +385,30 @@ protected:
     // Returns a random integer 0 <= x < size. Seed must never be 0.
     static inline int irand(double& seed, int size) {
         return (int)(drand(seed) * size); }
+
+    // For (advanced) stamping.
+    struct Frame {
+        enum TYPE { START = 0, ENTER = 1, RETURN = 2, CLOSE = 3 };
+        Lit curr, next;
+        unsigned type : 3;
+        unsigned learnt : 1;
+        Frame(TYPE t, Lit p, Lit q, unsigned l) : curr(p), next(q), type(t), learnt(l) {}
+    };
+
+    vec<int32_t>        discovered;
+    vec<int32_t>        finished;
+    vec<int32_t>        observed;
+    vec<char>           flag;
+    vec<Lit>            root;
+    vec<Lit>            parent;
+
+    vec<Frame>          rec_stack;
+    vec<Lit>            scc; // Strongly connected component.
+
+    bool stampAll(bool use_bin_learnts);
+    int stamp(Lit p, int stamp_time, bool use_bin_learnts);
+    inline bool implExistsByBin(Lit p, bool use_bin_learnts) const;
+    inline bool isRoot(Lit p, bool use_bin_learnts) const;
 };
 
 

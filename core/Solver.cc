@@ -27,6 +27,12 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 using namespace Minisat;
 
+#ifdef BIN_DRUP
+int Solver::buf_len = 0;
+unsigned char Solver::drup_buf[2 * 1024 * 1024];
+unsigned char* Solver::buf_ptr = drup_buf;
+#endif
+
 //=================================================================================================
 // Options:
 
@@ -54,7 +60,8 @@ Solver::Solver() :
 
     // Parameters (user settable):
     //
-    verbosity        (0)
+    drup_file        (NULL)
+  , verbosity        (0)
   , var_decay_no_r   (opt_var_decay_no_r)
   , var_decay_glue_r (opt_var_decay_glue_r)
   , clause_decay     (opt_clause_decay)
@@ -84,8 +91,6 @@ Solver::Solver() :
   , dec_vars(0), clauses_literals(0), learnts_literals(0), max_literals(0), tot_literals(0)
 
   , ok                 (true)
-  , tier2_learnts_dirty(false)
-  , local_learnts_dirty(false)
   , cla_inc            (1)
   , var_inc_no_r       (1)
   , var_inc_glue_r     (1)
@@ -144,6 +149,16 @@ Var Solver::newVar(bool sign, bool dvar)
     decision .push();
     trail    .capacity(v+1);
     setDecisionVar(v, dvar);
+
+    // Additional space needed for stamping.
+    // TODO: allocate exact memory.
+    seen      .push(0);
+    discovered.push(0);         discovered.push(0);
+    finished  .push(0);         finished  .push(0);
+    observed  .push(0);         observed  .push(0);
+    flag      .push(0);         flag      .push(0);
+    root      .push(lit_Undef); root      .push(lit_Undef);
+    parent    .push(lit_Undef); parent    .push(lit_Undef);
     return v;
 }
 
@@ -156,12 +171,33 @@ bool Solver::addClause_(vec<Lit>& ps)
     // Check if clause is satisfied and remove false/duplicate literals:
     sort(ps);
     Lit p; int i, j;
+
+    if (drup_file){
+        add_oc.clear();
+        for (int i = 0; i < ps.size(); i++) add_oc.push(ps[i]); }
+
     for (i = j = 0, p = lit_Undef; i < ps.size(); i++)
         if (value(ps[i]) == l_True || ps[i] == ~p)
             return true;
         else if (value(ps[i]) != l_False && ps[i] != p)
             ps[j++] = p = ps[i];
     ps.shrink(i - j);
+
+    if (drup_file && i != j){
+#ifdef BIN_DRUP
+        binDRUP('a', ps, drup_file);
+        binDRUP('d', add_oc, drup_file);
+#else
+        for (int i = 0; i < ps.size(); i++)
+            fprintf(drup_file, "%i ", (var(ps[i]) + 1) * (-2 * sign(ps[i]) + 1));
+        fprintf(drup_file, "0\n");
+
+        fprintf(drup_file, "d ");
+        for (int i = 0; i < add_oc.size(); i++)
+            fprintf(drup_file, "%i ", (var(add_oc[i]) + 1) * (-2 * sign(add_oc[i]) + 1));
+        fprintf(drup_file, "0\n");
+#endif
+    }
 
     if (ps.size() == 0)
         return ok = false;
@@ -208,6 +244,21 @@ void Solver::detachClause(CRef cr, bool strict) {
 
 void Solver::removeClause(CRef cr) {
     Clause& c = ca[cr];
+
+    if (drup_file){
+        if (c.mark() != 1){
+#ifdef BIN_DRUP
+            binDRUP('d', c, drup_file);
+#else
+            fprintf(drup_file, "d ");
+            for (int i = 0; i < c.size(); i++)
+                fprintf(drup_file, "%i ", (var(c[i]) + 1) * (-2 * sign(c[i]) + 1));
+            fprintf(drup_file, "0\n");
+#endif
+        }else
+            printf("c Bug: removeClause(). I don't expect this to happen.\n");
+    }
+
     detachClause(cr);
     // Don't leave pointers to free'd memory!
     if (locked(c)){
@@ -307,16 +358,15 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& ou
         // Update LBD if improved.
         if (c.learnt() && c.mark() != CORE){
             int lbd = computeLBD(c);
-            if (lbd + 1 < c.lbd()){
+            if (lbd < c.lbd()){
                 if (c.lbd() <= 30) c.removable(false); // Protect once from reduction.
                 c.set_lbd(lbd);
                 if (lbd <= core_lbd_cut){
-                    if (c.mark() == LOCAL) local_learnts_dirty = true;
-                    else                   tier2_learnts_dirty = true;
                     learnts_core.push(confl);
                     c.mark(CORE);
                 }else if (lbd <= 6 && c.mark() == LOCAL){
-                    local_learnts_dirty = true;
+                    // Bug: 'cr' may already be in 'learnts_tier2', e.g., if 'cr' was demoted from TIER2
+                    // to LOCAL previously and if that 'cr' is not cleaned from 'learnts_tier2' yet.
                     learnts_tier2.push(confl);
                     c.mark(TIER2); }
             }
@@ -663,7 +713,6 @@ void Solver::reduceDB()
                 learnts_local[j++] = learnts_local[i]; }
     }
     learnts_local.shrink(i - j);
-    local_learnts_dirty = false;
 
     checkGarbage();
 }
@@ -672,7 +721,7 @@ void Solver::reduceDB_Tier2()
     int i, j;
     for (i = j = 0; i < learnts_tier2.size(); i++){
         Clause& c = ca[learnts_tier2[i]];
-        if (c.mark() == TIER2) // No need to call 'cleanLearnts'.
+        if (c.mark() == TIER2)
             if (!locked(c) && c.touched() + 30000 < conflicts){
                 learnts_local.push(learnts_tier2[i]);
                 c.mark(LOCAL);
@@ -683,7 +732,6 @@ void Solver::reduceDB_Tier2()
                 learnts_tier2[j++] = learnts_tier2[i];
     }
     learnts_tier2.shrink(i - j);
-    tier2_learnts_dirty = false;
 }
 
 
@@ -699,7 +747,6 @@ void Solver::removeSatisfied(vec<CRef>& cs)
     }
     cs.shrink(i - j);
 }
-
 
 void Solver::rebuildOrderHeap()
 {
@@ -721,15 +768,7 @@ void Solver::rebuildOrderHeap()
 |    Simplify the clause database according to the current top-level assigment. Currently, the only
 |    thing done here is the removal of satisfied clauses, but more things can be put here.
 |________________________________________________________________________________________________@*/
-void Solver::cleanLearnts(vec<CRef>& learnts, unsigned valid_mark)
-{
-    int i, j;
-    for (i = j = 0; i < learnts.size(); i++)
-        if (ca[learnts[i]].mark() == valid_mark)
-            learnts[j++] = learnts[i];
-    learnts.shrink(i - j);
-}
-bool Solver::simplify()
+bool Solver::simplify(bool do_stamping)
 {
     assert(decisionLevel() == 0);
 
@@ -739,25 +778,132 @@ bool Solver::simplify()
     if (nAssigns() == simpDB_assigns || (simpDB_props > 0))
         return true;
 
-    if (local_learnts_dirty) cleanLearnts(learnts_local, LOCAL);
-    if (tier2_learnts_dirty) cleanLearnts(learnts_tier2, TIER2);
-    local_learnts_dirty = tier2_learnts_dirty = false;
-
     // Remove satisfied clauses:
-    removeSatisfied(learnts_core);
-    removeSatisfied(learnts_tier2);
-    removeSatisfied(learnts_local);
+    safeRemoveSatisfiedCompact(learnts_core, CORE);
+    safeRemoveSatisfiedCompact(learnts_tier2, TIER2);
+    safeRemoveSatisfiedCompact(learnts_local, LOCAL);
     if (remove_satisfied)        // Can be turned off.
         removeSatisfied(clauses);
+
+    if (do_stamping)
+        ok = stampAll(true);
+
     checkGarbage();
     rebuildOrderHeap();
 
     simpDB_assigns = nAssigns();
     simpDB_props   = clauses_literals + learnts_literals;   // (shouldn't depend on stats really, but it will do for now)
 
-    return true;
+    return ok;
 }
 
+
+// TODO: very dirty and hackish.
+void Solver::removeClauseHack(CRef cr, Lit watched0, Lit watched1)
+{
+    assert(ca[cr].size() >= 2);
+
+    Clause& c = ca[cr];
+    if (drup_file) // Hackish.
+        if (c.mark() != 1){
+#ifdef BIN_DRUP
+            binDRUP('d', add_oc, drup_file); // 'add_oc' not 'c'.
+#else
+            for (int i = 0; i < add_oc.size(); i++)
+                fprintf(drup_file, "%i ", (var(add_oc[i]) + 1) * (-2 * sign(add_oc[i]) + 1));
+            fprintf(drup_file, "0\n");
+#endif
+        }else
+            printf("c Bug: removeClauseHack(). I don't expect this to happen.\n");
+
+    // TODO: dirty hack to exploit 'detachClause'. 'c' hasn't shrunk yet, so this will work fine.
+    c[0] = watched0, c[1] = watched1;
+    detachClause(cr);
+    // Don't leave pointers to free'd memory!
+    if (locked(c)){
+        Lit implied = c.size() != 2 ? c[0] : (value(c[0]) == l_True ? c[0] : c[1]);
+        vardata[var(implied)].reason = CRef_Undef; }
+    c.mark(1); 
+    ca.free(cr);
+}
+
+// TODO: needs clean up.
+void Solver::safeRemoveSatisfiedCompact(vec<CRef>& cs, unsigned valid_mark)
+{
+    int i, j, k, l;
+    for (i = j = 0; i < cs.size(); i++){
+        Clause& c = ca[cs[i]];
+        if (c.mark() != valid_mark) continue;
+
+        Lit c0 = c[0], c1 = c[1];
+        if (drup_file){ // Remember the original clause before attempting to modify it.
+            add_oc.clear();
+            for (int i = 0; i < c.size(); i++) add_oc.push(c[i]); }
+
+        // Remove false literals at the same time.
+        for (k = l = 0; k < c.size(); k++)
+            if (value(c[k]) == l_True){
+                removeClauseHack(cs[i], c0, c1);
+                goto NextClause; // Clause already satisfied; forget about it.
+            }else if (value(c[k]) == l_Undef)
+                c[l++] = c[k];
+        assert(1 < l && l <= k);
+
+        // If became binary, we also need to migrate watchers. The easiest way is to allocate a new binary.
+        if (l == 2 && k != 2){
+            assert(add_tmp.size() == 0);
+            add_tmp.push(c[0]); add_tmp.push(c[1]);
+            bool learnt = c.learnt(); // Need a copy; see right below.
+            int lbd = c.lbd();
+            int m = c.mark();
+            CRef cr = ca.alloc(add_tmp, learnt); // Caution! 'alloc' may invalidate the 'c' reference.
+            if (learnt){
+                if (m != CORE) learnts_core.push(cr);
+                ca[cr].mark(CORE);
+                ca[cr].set_lbd(lbd > 2 ? 2 : lbd); }
+            attachClause(cr);
+
+            if (drup_file){
+#ifdef BIN_DRUP
+                binDRUP('a', add_tmp, drup_file);
+#else
+                for (int i = 0; i < add_tmp.size(); i++)
+                    fprintf(drup_file, "%i ", (var(add_tmp[i]) + 1) * (-2 * sign(add_tmp[i]) + 1));
+                fprintf(drup_file, "0\n");
+#endif
+            }
+            add_tmp.clear();
+
+            removeClauseHack(cs[i], c0, c1);
+            cs[j++] = cr; // Should be after 'removeClauseHack' because 'i' may be equal to 'j'.
+            goto NextClause;
+        }
+
+        c.shrink(k - l); // FIXME: fix (statistical) memory leak.
+        if (c.learnt()) learnts_literals -= (k - l);
+        else            clauses_literals -= (k - l);
+
+        if (drup_file && k != l){
+#ifdef BIN_DRUP
+            binDRUP('a', c, drup_file);
+            binDRUP('d', add_oc, drup_file);
+#else
+            for (int i = 0; i < c.size(); i++)
+                fprintf(drup_file, "%i ", (var(c[i]) + 1) * (-2 * sign(c[i]) + 1));
+            fprintf(drup_file, "0\n");
+
+            fprintf(drup_file, "d ");
+            for (int i = 0; i < add_oc.size(); i++)
+                fprintf(drup_file, "%i ", (var(add_oc[i]) + 1) * (-2 * sign(add_oc[i]) + 1));
+            fprintf(drup_file, "0\n");
+#endif
+        }
+
+        cs[j++] = cs[i];
+NextClause:;
+    }
+    cs.shrink(i - j);
+}
 
 /*_________________________________________________________________________________________________
 |
@@ -792,6 +938,7 @@ lbool Solver::search(int& nof_conflicts)
             analyze(confl, learnt_clause, backtrack_level, lbd);
             cancelUntil(backtrack_level);
 
+            lbd--;
             if (glucose_restart){
                 conflicts_glue++;
                 lbd_queue.push(lbd);
@@ -815,6 +962,15 @@ lbool Solver::search(int& nof_conflicts)
                     claBumpActivity(ca[cr]); }
                 attachClause(cr);
                 uncheckedEnqueue(learnt_clause[0], cr);
+            }
+            if (drup_file){
+#ifdef BIN_DRUP
+                binDRUP('a', learnt_clause, drup_file);
+#else
+                for (int i = 0; i < learnt_clause.size(); i++)
+                    fprintf(drup_file, "%i ", (var(learnt_clause[i]) + 1) * (-2 * sign(learnt_clause[i]) + 1));
+                fprintf(drup_file, "0\n");
+#endif
             }
 
             varDecayActivity();
@@ -842,7 +998,7 @@ lbool Solver::search(int& nof_conflicts)
                 restart = lbd_queue.full() && (lbd_queue.avg() * K > global_lbd_sum / conflicts_glue);
                 cached = true;
             }
-            if (restart/* || !withinBudget()*/){
+            if (restart /*|| !withinBudget()*/){
                 lbd_queue.clear();
                 // Reached bound on number of conflicts:
                 progress_estimate = progressEstimate();
@@ -850,7 +1006,7 @@ lbool Solver::search(int& nof_conflicts)
                 return l_Undef; }
 
             // Simplify the set of problem clauses:
-            if (decisionLevel() == 0 && !simplify())
+            if (decisionLevel() == 0 && !simplify(true))
                 return l_False;
 
             if (conflicts >= next_T2_reduce){
@@ -957,9 +1113,7 @@ lbool Solver::solve_()
         printf("c ===============================================================================\n");
     }
 
-#ifdef EXTRA_VAR_ACT_BUMP
     add_tmp.clear();
-#endif
 
     glucose_restart = true;
     int init = 10000;
@@ -971,10 +1125,11 @@ lbool Solver::solve_()
     int phase_allotment = 100;
     for (;;){
         int weighted = glucose_restart ? phase_allotment * 2 : phase_allotment;
+        fflush(stdout);
 
         while (status == l_Undef && weighted > 0 /*&& withinBudget()*/)
             status = search(weighted);
-        if (status != l_Undef/* || !withinBudget()*/)
+        if (status != l_Undef /*|| !withinBudget()*/)
             break; // Should break here for correctness in incremental SAT solving.
 
         glucose_restart = !glucose_restart;
@@ -985,6 +1140,9 @@ lbool Solver::solve_()
     if (verbosity >= 1)
         printf("c ===============================================================================\n");
 
+#ifdef BIN_DRUP
+    if (drup_file && status == l_False) binDRUP_flush(drup_file);
+#endif
 
     if (status == l_True){
         // Extend & copy model:
@@ -1138,3 +1296,192 @@ void Solver::garbageCollect()
                ca.size()*ClauseAllocator::Unit_Size, to.size()*ClauseAllocator::Unit_Size);
     to.moveTo(ca);
 }
+
+
+inline int gcd(int a, int b) {
+    int tmp;
+    if (a < b) tmp = a, a = b, b = tmp;
+    while (b) tmp = b, b = a % b, a = tmp;
+    return a;
+}
+
+bool Solver::stampAll(bool use_bin_learnts)
+{
+    // Initialization.
+    int stamp_time = 0;
+    int nLits = 2*nVars();
+    for (int i = 0; i < nVars(); i++){
+        int m = i*2, n = i*2 + 1;
+        discovered[m] = discovered[n] = finished[m] = finished[n] = observed[m] = observed[n] = 0;
+        root[m] = root[n] = parent[m] = parent[n] = lit_Undef;
+        flag[m] = flag[n] = 0; }
+
+    for (int roots_only = 1; roots_only >= 0; roots_only--){
+        int l = irand(random_seed, nLits);
+        int l_inc = irand(random_seed, nLits-1) + 1; // Avoid 0 but ensure less than 'nLits'.
+        while (gcd(nLits, l_inc) > 1)
+            if (++l_inc == nLits) l_inc = 1;
+
+        int first = l;
+        do{
+            Lit p = toLit(l);
+            if (value(p) == l_Undef && !discovered[toInt(p)] &&
+                    (!roots_only || isRoot(p, use_bin_learnts)) &&
+                    implExistsByBin(p, use_bin_learnts)){
+                stamp_time = stamp(p, stamp_time, use_bin_learnts);
+
+                if (!ok || propagate() != CRef_Undef)
+                    return ok = false;
+            }
+
+            // Compute next literal to look at.
+            l += l_inc;
+            if (l >= nLits) l -= nLits;
+
+        }while(l != first);
+    }
+
+    return true;
+}
+
+int Solver::stamp(Lit p, int stamp_time, bool use_bin_learnts)
+{
+    assert(value(p) == l_Undef && !discovered[toInt(p)] && !finished[toInt(p)]);
+    assert(rec_stack.size() == 0 && scc.size() == 0);
+
+    int start_stamp = 0;
+    rec_stack.push(Frame(Frame::START, p, lit_Undef, 0));
+
+    while (rec_stack.size()){
+        const Frame f = rec_stack.last(); rec_stack.pop();
+        int i_curr = toInt(f.curr);
+        int i_next = toInt(f.next);
+
+        if (f.type == Frame::START){
+            if (discovered[i_curr]){
+                observed[i_curr] = stamp_time;
+                continue; }
+
+            assert(!finished[i_curr]);
+            discovered[i_curr] = observed[i_curr] = ++stamp_time;
+
+            if (start_stamp == 0){
+                start_stamp = stamp_time;
+                root[i_curr] = f.curr;
+                assert(parent[i_curr] == lit_Undef); }
+            rec_stack.push(Frame(Frame::CLOSE, f.curr, lit_Undef, 0));
+
+            assert(!flag[i_curr]);
+            flag[i_curr] = 1;
+            scc.push(f.curr);
+
+            for (int undiscovered = 0; undiscovered <= 1; undiscovered++){
+                int prev_top = rec_stack.size();
+                analyze_toclear.clear();
+
+                const vec<Watcher>& ws = watches_bin[f.curr];
+                for (int k = 0; k < ws.size(); k++){
+                    Lit the_other = ws[k].blocker;
+
+                    if (value(the_other) == l_Undef
+                     && !seen[toInt(the_other)]
+                     && undiscovered == !discovered[toInt(the_other)])
+//                     && (use_bin_learnts || !ca[ws[k].cref].learnt()))
+                    {
+                        seen[toInt(the_other)] = 1;
+                        analyze_toclear.push(the_other);
+
+                        rec_stack.push(Frame(Frame::ENTER, f.curr, the_other, 0));
+                        //rec_stack.push(Frame(Frame::ENTER, f.curr, the_other, ca[ws[k].cref].learnt()));
+                    }
+                }
+                for (int k = 0; k < analyze_toclear.size(); k++) seen[toInt(analyze_toclear[k])] = 0;
+
+                // Now randomize child nodes to visit by shuffling pushed stack entries.
+                int stacked = rec_stack.size() - prev_top;
+                for (int i = 0; i < stacked - 1; i++){
+                    int j = i + irand(random_seed, stacked - i); // i <= j < stacked
+                    if (i != j){
+                        Frame tmp = rec_stack[prev_top + i];
+                        rec_stack[prev_top + i] = rec_stack[prev_top + j];
+                        rec_stack[prev_top + j] = tmp; }
+                }
+            }
+
+        }else if (f.type == Frame::ENTER){
+            rec_stack.push(Frame(Frame::RETURN, f.curr, f.next, f.learnt));
+
+            int neg_observed = observed[toInt(~f.next)];
+            if (start_stamp <= neg_observed){ // Failed literal?
+                Lit failed;
+                for (failed = f.curr;
+                     discovered[toInt(failed)] > neg_observed;
+                     failed = parent[toInt(failed)])
+                    assert(failed != lit_Undef);
+
+                if (drup_file && value(~failed) != l_True){
+#ifdef BIN_DRUP
+                    assert(add_tmp.size() == 0);
+                    add_tmp.push(~failed);
+                    binDRUP('a', add_tmp, drup_file);
+                    add_tmp.clear();
+#else
+                    fprintf(drup_file, "%i 0\n", (var(~failed) + 1) * (-2 * sign(~failed) + 1));
+#endif
+                }
+
+                if (!(ok = enqueue(~failed)))
+                    return -1; // Who cares what?
+
+                if (discovered[toInt(~f.next)] && !finished[toInt(~f.next)]){
+                    rec_stack.pop(); // Skip this edge after a failed literal.
+                    continue; }
+            }
+
+            if (!discovered[i_next]){
+                parent[i_next] = f.curr;
+                root[i_next] = p;
+                rec_stack.push(Frame(Frame::START, f.next, lit_Undef, 0)); }
+
+        }else if (f.type == Frame::RETURN){
+            if (!finished[i_next] && discovered[i_next] < discovered[i_curr]){
+                discovered[i_curr] = discovered[i_next];
+                flag[i_curr] = 0;
+            }
+            observed[i_next] = stamp_time;
+
+        }else if (f.type == Frame::CLOSE){
+            if (flag[i_curr]){
+                stamp_time++;
+                int curr_discovered = discovered[i_curr];
+                Lit q;
+                do{
+                    q = scc.last(); scc.pop();
+                    flag      [toInt(q)] = 0;
+                    discovered[toInt(q)] = curr_discovered;
+                    finished  [toInt(q)] = stamp_time;
+                }while (q != f.curr);
+            }
+
+        }else assert(false);
+    }
+
+    return stamp_time;
+}
+
+bool Solver::implExistsByBin(Lit p, bool use_bin_learnts) const {
+    assert(value(p) == l_Undef);
+
+    const vec<Watcher>& ws = watches_bin[p];
+    for (int i = 0; i < ws.size(); i++){
+        Lit the_other = ws[i].blocker;
+        assert(value(the_other) != l_False); // Propagate then.
+
+        if (value(the_other) != l_True && !discovered[toInt(the_other)])
+            if (use_bin_learnts || !ca[ws[i].cref].learnt())
+                return true;
+    }
+    return false;
+}
+
+bool Solver::isRoot(Lit p, bool use_bin_learnts) const { return !implExistsByBin(~p, use_bin_learnts); }
