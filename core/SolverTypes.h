@@ -1,6 +1,8 @@
 /***********************************************************************************[SolverTypes.h]
-Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
-Copyright (c) 2007-2010, Niklas Sorensson
+MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
+           Copyright (c) 2007-2010, Niklas Sorensson
+
+Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -126,7 +128,9 @@ class Clause {
         unsigned learnt    : 1;
         unsigned has_extra : 1;
         unsigned reloced   : 1;
-        unsigned size      : 27; }                            header;
+        unsigned lbd       : 26;
+        unsigned removable : 1;
+        unsigned size      : 32; }                            header;
     union { Lit lit; float act; uint32_t abs; CRef rel; } data[0];
 
     friend class ClauseAllocator;
@@ -139,6 +143,8 @@ class Clause {
         header.has_extra = use_extra;
         header.reloced   = 0;
         header.size      = ps.size();
+        header.lbd       = 0;
+        header.removable = 1;
 
         for (int i = 0; i < ps.size(); i++) 
             data[i].lit = ps[i];
@@ -171,6 +177,11 @@ public:
     bool         reloced     ()      const   { return header.reloced; }
     CRef         relocation  ()      const   { return data[0].rel; }
     void         relocate    (CRef c)        { header.reloced = 1; data[0].rel = c; }
+
+    int          lbd         ()      const   { return header.lbd; }
+    void         set_lbd     (int lbd)       { header.lbd = lbd; }
+    bool         removable   ()      const   { return header.removable; }
+    void         removable   (bool b)        { header.removable = b ? 1 : 0; }
 
     // NOTE: somewhat unsafe to change the clause in-place! Must manually call 'calcAbstraction' afterwards for
     //       subsumption operations to behave correctly.
@@ -243,7 +254,11 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         // Copy extra data-fields: 
         // (This could be cleaned-up. Generalize Clause-constructor to be applicable here instead?)
         to[cr].mark(c.mark());
-        if (to[cr].learnt())         to[cr].activity() = c.activity();
+        if (to[cr].learnt()){
+            to[cr].activity() = c.activity();
+            to[cr].set_lbd(c.lbd());
+            to[cr].removable(c.removable());
+        }
         else if (to[cr].has_extra()) to[cr].calcAbstraction();
     }
 };

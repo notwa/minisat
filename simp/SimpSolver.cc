@@ -1,6 +1,8 @@
 /***********************************************************************************[SimpSolver.cc]
-Copyright (c) 2006,      Niklas Een, Niklas Sorensson
-Copyright (c) 2007-2010, Niklas Sorensson
+MiniSat -- Copyright (c) 2006,      Niklas Een, Niklas Sorensson
+           Copyright (c) 2007-2010, Niklas Sorensson
+
+Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -521,8 +523,10 @@ bool SimpSolver::eliminateVar(Var v)
     occurs[v].clear(true);
     
     // Free watchers lists for this variable, if possible:
-    if (watches[ mkLit(v)].size() == 0) watches[ mkLit(v)].clear(true);
-    if (watches[~mkLit(v)].size() == 0) watches[~mkLit(v)].clear(true);
+    watches_bin[ mkLit(v)].clear(true);
+    watches_bin[~mkLit(v)].clear(true);
+    watches[ mkLit(v)].clear(true);
+    watches[~mkLit(v)].clear(true);
 
     return backwardSubsumptionCheck();
 }
@@ -583,6 +587,12 @@ bool SimpSolver::eliminate(bool turn_off_elim)
         return false;
     else if (!use_simplification)
         return true;
+
+    // TODO: remove.
+    int skip = clauses.size() > 4800000;
+    if (skip){
+        printf("c Too many clauses; skip preprocessing.\n");
+        goto cleanup; }
 
     // Main simplification loop:
     //

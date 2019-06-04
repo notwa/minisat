@@ -1,6 +1,8 @@
 /****************************************************************************************[Solver.h]
-Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
-Copyright (c) 2007-2010, Niklas Sorensson
+MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
+           Copyright (c) 2007-2010, Niklas Sorensson
+
+Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -21,6 +23,25 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef Minisat_Solver_h
 #define Minisat_Solver_h
 
+#include <deque>
+
+#define GLUCOSE23
+//#define WIDE_WALK
+//#define EXTRA_VAR_ACT_BUMP
+//#define INT_QUEUE_AVG
+//#define REDUCE_BASE_BUG
+//#define ZERO_LEVEL_LBD
+//#define LOOSE_PROP_STAT
+
+#ifdef GLUCOSE23
+  #define WIDE_WALK
+  #define EXTRA_VAR_ACT_BUMP
+  #define INT_QUEUE_AVG
+  #define REDUCE_BASE_BUG
+  #define ZERO_LEVEL_LBD
+  #define LOOSE_PROP_STAT
+#endif
+
 #include "mtl/Vec.h"
 #include "mtl/Heap.h"
 #include "mtl/Alg.h"
@@ -34,6 +55,31 @@ namespace Minisat {
 // Solver -- the main class:
 
 class Solver {
+private:
+    template<typename T>
+    class MyQueue {
+        int sz;
+        int64_t sum;
+        std::deque<T> q;
+    public:
+        MyQueue(int init_sz) : sz(init_sz), sum(0) { assert(sz > 0); }
+        inline bool   full () const { return q.size() == (unsigned) sz; }
+#ifdef INT_QUEUE_AVG
+        inline T      avg  () const { assert(full()); return sum / sz; }
+#else
+        inline double avg  () const { assert(full()); return sum / (double) sz; }
+#endif
+        inline void   clear()       { sum = 0; q.clear(); }
+        void push(T e) {
+            sum += e;
+            q.push_back(e);
+
+            if (q.size() > (unsigned) sz){
+                sum -= q.front();
+                q.pop_front(); }
+        }
+    };
+
 public:
 
     // Constructor/Destructor:
@@ -175,6 +221,7 @@ protected:
     vec<double>         activity;         // A heuristic measurement of the activity of a variable.
     double              var_inc;          // Amount to bump next variable with.
     OccLists<Lit, vec<Watcher>, WatcherDeleted>
+                        watches_bin,      // Watches for binary clauses only.
                         watches;          // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
     vec<lbool>          assigns;          // The current assignments.
     vec<char>           polarity;         // The preferred polarity of each variable.
@@ -190,6 +237,13 @@ protected:
     double              progress_estimate;// Set by 'search()'.
     bool                remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
 
+    float               global_lbd_sum;
+    MyQueue<int>        lbd_queue;        // For computing moving averages of recent LBD values.
+    MyQueue<int>        trail_sz_queue;   // Ditto, but for recent trail sizes (i.e., number of assigned variables).
+    int                 reduce_round;
+    uint64_t            reduce_base;      // Determines the next time of reduction.
+    uint64_t            next_reduce_at;
+
     ClauseAllocator     ca;
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
@@ -199,6 +253,9 @@ protected:
     vec<Lit>            analyze_stack;
     vec<Lit>            analyze_toclear;
     vec<Lit>            add_tmp;
+
+    vec<uint64_t>       seen2;    // Mostly for efficient LBD computation. 'seen2[i]' will indicate if decision level or variable 'i' has been seen.
+    uint64_t            counter;  // Simple counter for marking purpose with 'seen2'.
 
     double              max_learnts;
     double              learntsize_adjust_confl;
@@ -219,7 +276,7 @@ protected:
     bool     enqueue          (Lit p, CRef from = CRef_Undef);                         // Test if fact 'p' contradicts current state, enqueue otherwise.
     CRef     propagate        ();                                                      // Perform unit propagation. Returns possibly conflicting clause.
     void     cancelUntil      (int level);                                             // Backtrack until a certain level.
-    void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel);    // (bt = backtrack)
+    void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& out_lbd);    // (bt = backtrack)
     void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
     bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
     lbool    search           (int nof_conflicts);                                     // Search for a given number of conflicts.
@@ -227,6 +284,7 @@ protected:
     void     reduceDB         ();                                                      // Reduce the set of learnt clauses.
     void     removeSatisfied  (vec<CRef>& cs);                                         // Shrink 'cs' to contain only non-satisfied clauses.
     void     rebuildOrderHeap ();
+    bool     binResMinimize   (vec<Lit>& out_learnt);                                  // Further learnt clause minimization by binary resolution.
 
     // Maintaining Variable/Clause activity:
     //
@@ -254,6 +312,23 @@ protected:
     int      level            (Var x) const;
     double   progressEstimate ()      const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
     bool     withinBudget     ()      const;
+
+    template<class V> int computeLBD(const V& c) {
+        int lbd = 0;
+
+        counter++;
+        for (int i = 0; i < c.size(); i++){
+            int l = level(var(c[i]));
+#ifdef ZERO_LEVEL_LBD
+            if (seen2[l] != counter){
+#else
+            if (l != 0 && seen2[l] != counter){
+#endif
+                seen2[l] = counter;
+                lbd++; } }
+
+        return lbd;
+    }
 
     // Static helpers:
     //
@@ -313,7 +388,10 @@ inline bool     Solver::addEmptyClause  ()                      { add_tmp.clear(
 inline bool     Solver::addClause       (Lit p)                 { add_tmp.clear(); add_tmp.push(p); return addClause_(add_tmp); }
 inline bool     Solver::addClause       (Lit p, Lit q)          { add_tmp.clear(); add_tmp.push(p); add_tmp.push(q); return addClause_(add_tmp); }
 inline bool     Solver::addClause       (Lit p, Lit q, Lit r)   { add_tmp.clear(); add_tmp.push(p); add_tmp.push(q); add_tmp.push(r); return addClause_(add_tmp); }
-inline bool     Solver::locked          (const Clause& c) const { return value(c[0]) == l_True && reason(var(c[0])) != CRef_Undef && ca.lea(reason(var(c[0]))) == &c; }
+inline bool     Solver::locked          (const Clause& c) const {
+    int i = c.size() != 2 ? 0 : (value(c[0]) == l_True ? 0 : 1);
+    return value(c[i]) == l_True && reason(var(c[i])) != CRef_Undef && ca.lea(reason(var(c[i]))) == &c;
+}
 inline void     Solver::newDecisionLevel()                      { trail_lim.push(trail.size()); }
 
 inline int      Solver::decisionLevel ()      const   { return trail_lim.size(); }
