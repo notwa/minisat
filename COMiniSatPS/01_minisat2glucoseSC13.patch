@@ -1,0 +1,687 @@
+diff -ru minisat-2.2.0/core/Solver.cc minisat2glucose/core/Solver.cc
+--- minisat-2.2.0/core/Solver.cc	2015-03-04 19:10:52.136915474 -0500
++++ minisat2glucose/core/Solver.cc	2015-03-05 22:19:36.403625254 -0500
+@@ -1,6 +1,8 @@
+ /***************************************************************************************[Solver.cc]
+-Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
+-Copyright (c) 2007-2010, Niklas Sorensson
++MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
++           Copyright (c) 2007-2010, Niklas Sorensson
++
++Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
+ 
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+ associated documentation files (the "Software"), to deal in the Software without restriction,
+@@ -83,6 +85,7 @@
+   , ok                 (true)
+   , cla_inc            (1)
+   , var_inc            (1)
++  , watches_bin        (WatcherDeleted(ca))
+   , watches            (WatcherDeleted(ca))
+   , qhead              (0)
+   , simpDB_assigns     (-1)
+@@ -91,6 +94,15 @@
+   , progress_estimate  (0)
+   , remove_satisfied   (true)
+ 
++  , global_lbd_sum     (0)
++  , lbd_queue          (50)
++  , trail_sz_queue     (5000)
++  , reduce_round       (1)
++  , reduce_base        (2000)
++  , next_reduce_at     (reduce_base)
++  
++  , counter            (0)
++
+     // Resource constraints:
+     //
+   , conflict_budget    (-1)
+@@ -114,6 +126,8 @@
+ Var Solver::newVar(bool sign, bool dvar)
+ {
+     int v = nVars();
++    watches_bin.init(mkLit(v, false));
++    watches_bin.init(mkLit(v, true ));
+     watches  .init(mkLit(v, false));
+     watches  .init(mkLit(v, true ));
+     assigns  .push(l_Undef);
+@@ -121,6 +135,7 @@
+     //activity .push(0);
+     activity .push(rnd_init_act ? drand(random_seed) * 0.00001 : 0);
+     seen     .push(0);
++    seen2    .push(0);
+     polarity .push(sign);
+     decision .push();
+     trail    .capacity(v+1);
+@@ -162,8 +177,9 @@
+ void Solver::attachClause(CRef cr) {
+     const Clause& c = ca[cr];
+     assert(c.size() > 1);
+-    watches[~c[0]].push(Watcher(cr, c[1]));
+-    watches[~c[1]].push(Watcher(cr, c[0]));
++    OccLists<Lit, vec<Watcher>, WatcherDeleted>& ws = c.size() == 2 ? watches_bin : watches;
++    ws[~c[0]].push(Watcher(cr, c[1]));
++    ws[~c[1]].push(Watcher(cr, c[0]));
+     if (c.learnt()) learnts_literals += c.size();
+     else            clauses_literals += c.size(); }
+ 
+@@ -171,14 +187,15 @@
+ void Solver::detachClause(CRef cr, bool strict) {
+     const Clause& c = ca[cr];
+     assert(c.size() > 1);
++    OccLists<Lit, vec<Watcher>, WatcherDeleted>& ws = c.size() == 2 ? watches_bin : watches;
+     
+     if (strict){
+-        remove(watches[~c[0]], Watcher(cr, c[1]));
+-        remove(watches[~c[1]], Watcher(cr, c[0]));
++        remove(ws[~c[0]], Watcher(cr, c[1]));
++        remove(ws[~c[1]], Watcher(cr, c[0]));
+     }else{
+         // Lazy detaching: (NOTE! Must clean all watcher lists before garbage collecting this clause)
+-        watches.smudge(~c[0]);
+-        watches.smudge(~c[1]);
++        ws.smudge(~c[0]);
++        ws.smudge(~c[1]);
+     }
+ 
+     if (c.learnt()) learnts_literals -= c.size();
+@@ -189,7 +206,9 @@
+     Clause& c = ca[cr];
+     detachClause(cr);
+     // Don't leave pointers to free'd memory!
+-    if (locked(c)) vardata[var(c[0])].reason = CRef_Undef;
++    if (locked(c)){
++        Lit implied = c.size() != 2 ? c[0] : (value(c[0]) == l_True ? c[0] : c[1]);
++        vardata[var(implied)].reason = CRef_Undef; }
+     c.mark(1); 
+     ca.free(cr);
+ }
+@@ -261,7 +280,7 @@
+ |        rest of literals. There may be others from the same level though.
+ |  
+ |________________________________________________________________________________________________@*/
+-void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
++void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& out_lbd)
+ {
+     int pathC = 0;
+     Lit p     = lit_Undef;
+@@ -275,18 +294,36 @@
+         assert(confl != CRef_Undef); // (otherwise should be UIP)
+         Clause& c = ca[confl];
+ 
++        // For binary clauses, we don't rearrange literals in propagate(), so check and make sure the first is an implied lit.
++        if (p != lit_Undef && c.size() == 2 && value(c[0]) == l_False){
++            assert(value(c[1]) == l_True);
++            Lit tmp = c[0];
++            c[0] = c[1], c[1] = tmp; }
++
+         if (c.learnt())
+             claBumpActivity(c);
+ 
++        // Update LBD if improved.
++        if (c.learnt() && c.lbd() > 2){
++            int lbd = computeLBD(c);
++            if (lbd + 1 < c.lbd()){
++                if (c.lbd() <= 30) c.removable(false); // Protect once from reduction.
++                c.set_lbd(lbd); }
++        }
++
+         for (int j = (p == lit_Undef) ? 0 : 1; j < c.size(); j++){
+             Lit q = c[j];
+ 
+             if (!seen[var(q)] && level(var(q)) > 0){
+                 varBumpActivity(var(q));
+                 seen[var(q)] = 1;
+-                if (level(var(q)) >= decisionLevel())
++                if (level(var(q)) >= decisionLevel()){
++#ifdef EXTRA_VAR_ACT_BUMP
++                    if (reason(var(q)) != CRef_Undef && ca[reason(var(q))].learnt())
++                        add_tmp.push(q);
++#endif
+                     pathC++;
+-                else
++                }else
+                     out_learnt.push(q);
+             }
+         }
+@@ -322,7 +359,7 @@
+                 out_learnt[j++] = out_learnt[i];
+             else{
+                 Clause& c = ca[reason(var(out_learnt[i]))];
+-                for (int k = 1; k < c.size(); k++)
++                for (int k = c.size() == 2 ? 0 : 1; k < c.size(); k++)
+                     if (!seen[var(c[k])] && level(var(c[k])) > 0){
+                         out_learnt[j++] = out_learnt[i];
+                         break; }
+@@ -335,6 +372,11 @@
+     out_learnt.shrink(i - j);
+     tot_literals += out_learnt.size();
+ 
++    out_lbd = computeLBD(out_learnt);
++    if (out_lbd <= 6 && out_learnt.size() <= 30) // Try further minimization?
++        if (binResMinimize(out_learnt))
++            out_lbd = computeLBD(out_learnt); // Recompute LBD if minimized.
++
+     // Find correct backtrack level:
+     //
+     if (out_learnt.size() == 1)
+@@ -353,6 +395,47 @@
+     }
+ 
+     for (int j = 0; j < analyze_toclear.size(); j++) seen[var(analyze_toclear[j])] = 0;    // ('seen[]' is now cleared)
++
++#ifdef EXTRA_VAR_ACT_BUMP
++    if (add_tmp.size() > 0){
++        for (int i = 0; i< add_tmp.size(); i++)
++            if (ca[reason(var(add_tmp[i]))].lbd() < out_lbd)
++                varBumpActivity(var(add_tmp[i]));
++        add_tmp.clear(); }
++#endif
++}
++
++
++// Try further learnt clause minimization by means of binary clause resolution.
++bool Solver::binResMinimize(vec<Lit>& out_learnt)
++{
++    // Preparation: remember which false variables we have in 'out_learnt'.
++    counter++;
++    for (int i = 1; i < out_learnt.size(); i++)
++        seen2[var(out_learnt[i])] = counter;
++
++    // Get the list of binary clauses containing 'out_learnt[0]'.
++    const vec<Watcher>& ws = watches_bin[~out_learnt[0]];
++
++    int to_remove = 0;
++    for (int i = 0; i < ws.size(); i++){
++        Lit the_other = ws[i].blocker;
++        // Does 'the_other' appear negatively in 'out_learnt'?
++        if (seen2[var(the_other)] == counter && value(the_other) == l_True){
++            to_remove++;
++            seen2[var(the_other)] = counter - 1; // Remember to remove this variable.
++        }
++    }
++
++    // Shrink.
++    if (to_remove > 0){
++        int last = out_learnt.size() - 1;
++        for (int i = 1; i < out_learnt.size() - to_remove; i++)
++            if (seen2[var(out_learnt[i])] != counter)
++                out_learnt[i--] = out_learnt[last--];
++        out_learnt.shrink(to_remove);
++    }
++    return to_remove != 0;
+ }
+ 
+ 
+@@ -366,6 +449,12 @@
+         assert(reason(var(analyze_stack.last())) != CRef_Undef);
+         Clause& c = ca[reason(var(analyze_stack.last()))]; analyze_stack.pop();
+ 
++        // Special handling for binary clauses like in 'analyze()'.
++        if (c.size() == 2 && value(c[0]) == l_False){
++            assert(value(c[1]) == l_True);
++            Lit tmp = c[0];
++            c[0] = c[1], c[1] = tmp; }
++
+         for (int i = 1; i < c.size(); i++){
+             Lit p  = c[i];
+             if (!seen[var(p)] && level(var(p)) > 0){
+@@ -414,7 +503,7 @@
+                 out_conflict.push(~trail[i]);
+             }else{
+                 Clause& c = ca[reason(x)];
+-                for (int j = 1; j < c.size(); j++)
++                for (int j = c.size() == 2 ? 0 : 1; j < c.size(); j++)
+                     if (level(var(c[j])) > 0)
+                         seen[var(c[j])] = 1;
+             }
+@@ -451,6 +540,7 @@
+     CRef    confl     = CRef_Undef;
+     int     num_props = 0;
+     watches.cleanAll();
++    watches_bin.cleanAll();
+ 
+     while (qhead < trail.size()){
+         Lit            p   = trail[qhead++];     // 'p' is enqueued fact to propagate.
+@@ -458,6 +548,20 @@
+         Watcher        *i, *j, *end;
+         num_props++;
+ 
++        vec<Watcher>& ws_bin = watches_bin[p];  // Propagate binary clauses first.
++        for (int k = 0; k < ws_bin.size(); k++){
++            Lit the_other = ws_bin[k].blocker;
++            if (value(the_other) == l_False){
++                confl = ws_bin[k].cref;
++#ifdef LOOSE_PROP_STAT
++                return confl;
++#else
++                goto ExitProp;
++#endif
++            }else if(value(the_other) == l_Undef)
++                uncheckedEnqueue(the_other, ws_bin[k].cref);
++        }
++
+         for (i = j = (Watcher*)ws, end = i + ws.size();  i != end;){
+             // Try to avoid inspecting the clause:
+             Lit blocker = i->blocker;
+@@ -501,6 +605,8 @@
+         }
+         ws.shrink(i - j);
+     }
++
++ExitProp:;
+     propagations += num_props;
+     simpDB_props -= num_props;
+ 
+@@ -520,22 +626,35 @@
+     ClauseAllocator& ca;
+     reduceDB_lt(ClauseAllocator& ca_) : ca(ca_) {}
+     bool operator () (CRef x, CRef y) { 
+-        return ca[x].size() > 2 && (ca[y].size() == 2 || ca[x].activity() < ca[y].activity()); } 
++        if (ca[x].size() == 2) return 0;
++        if (ca[y].size() == 2) return 1;
++
++        if (ca[x].lbd() > ca[y].lbd()) return 1;
++        if (ca[x].lbd() < ca[y].lbd()) return 0;    
++    
++        return ca[x].activity() < ca[y].activity();
++    }    
+ };
+ void Solver::reduceDB()
+ {
+     int     i, j;
+-    double  extra_lim = cla_inc / learnts.size();    // Remove any clause below this activity
+ 
+     sort(learnts, reduceDB_lt(ca));
+-    // Don't delete binary or locked clauses. From the rest, delete clauses from the first half
+-    // and clauses with activity smaller than 'extra_lim':
++
++    if (ca[learnts[learnts.size() / 2]].lbd() <= 3) reduce_base += 1000;
++#ifdef REDUCE_BASE_BUG
++    if (ca[learnts.last()].lbd() > 5) reduce_base -= 1000;
++#endif
++
++    int limit = learnts.size() / 2;
+     for (i = j = 0; i < learnts.size(); i++){
+         Clause& c = ca[learnts[i]];
+-        if (c.size() > 2 && !locked(c) && (i < learnts.size() / 2 || c.activity() < extra_lim))
++        if (c.size() > 2 && c.lbd() > 2 && c.removable() && !locked(c) && i < limit)
+             removeClause(learnts[i]);
+-        else
+-            learnts[j++] = learnts[i];
++        else{
++            if (!c.removable()) limit++;
++            c.removable(true);
++            learnts[j++] = learnts[i]; }
+     }
+     learnts.shrink(i - j);
+     checkGarbage();
+@@ -616,6 +735,7 @@
+     assert(ok);
+     int         backtrack_level;
+     int         conflictC = 0;
++    int         lbd;
+     vec<Lit>    learnt_clause;
+     starts++;
+ 
+@@ -624,16 +744,29 @@
+         if (confl != CRef_Undef){
+             // CONFLICT
+             conflicts++; conflictC++;
++#ifdef WIDE_WALK
++            if (conflicts % 5000 == 0 && var_decay < 0.95)
++                var_decay += 0.01;
++#endif
+             if (decisionLevel() == 0) return l_False;
+ 
++            trail_sz_queue.push(trail.size());
++            // Prevent restarts for a while if many variables are being assigned.
++            if (conflicts > 10000 && lbd_queue.full() && trail.size() > 1.4 * trail_sz_queue.avg())
++                lbd_queue.clear();
++
+             learnt_clause.clear();
+-            analyze(confl, learnt_clause, backtrack_level);
++            analyze(confl, learnt_clause, backtrack_level, lbd);
+             cancelUntil(backtrack_level);
+ 
++            lbd_queue.push(lbd);
++            global_lbd_sum += lbd;
++
+             if (learnt_clause.size() == 1){
+                 uncheckedEnqueue(learnt_clause[0]);
+             }else{
+                 CRef cr = ca.alloc(learnt_clause, true);
++                ca[cr].set_lbd(lbd);
+                 learnts.push(cr);
+                 attachClause(cr);
+                 claBumpActivity(ca[cr]);
+@@ -657,7 +790,8 @@
+ 
+         }else{
+             // NO CONFLICT
+-            if (nof_conflicts >= 0 && conflictC >= nof_conflicts || !withinBudget()){
++            if ((lbd_queue.full() && lbd_queue.avg() * 0.8 > global_lbd_sum / conflicts) || !withinBudget()){
++                lbd_queue.clear();
+                 // Reached bound on number of conflicts:
+                 progress_estimate = progressEstimate();
+                 cancelUntil(0);
+@@ -667,9 +801,9 @@
+             if (decisionLevel() == 0 && !simplify())
+                 return l_False;
+ 
+-            if (learnts.size()-nAssigns() >= max_learnts)
+-                // Reduce the set of learnt clauses:
++            if (conflicts >= next_reduce_at){
+                 reduceDB();
++                next_reduce_at = (++reduce_round) * (reduce_base += 1300); }
+ 
+             Lit next = lit_Undef;
+             while (decisionLevel() < assumptions.size()){
+@@ -768,13 +902,15 @@
+         printf("===============================================================================\n");
+     }
+ 
++#ifdef EXTRA_VAR_ACT_BUMP
++    add_tmp.clear();
++#endif
++#ifdef WIDE_WALK
++    var_decay = 0.8;
++#endif
+     // Search:
+-    int curr_restarts = 0;
+-    while (status == l_Undef){
+-        double rest_base = luby_restart ? luby(restart_inc, curr_restarts) : pow(restart_inc, curr_restarts);
+-        status = search(rest_base * restart_first);
+-        if (!withinBudget()) break;
+-        curr_restarts++;
++    while (status == l_Undef && withinBudget()){
++        status = search(0);
+     }
+ 
+     if (verbosity >= 1)
+@@ -879,6 +1015,7 @@
+     //
+     // for (int i = 0; i < watches.size(); i++)
+     watches.cleanAll();
++    watches_bin.cleanAll();
+     for (int v = 0; v < nVars(); v++)
+         for (int s = 0; s < 2; s++){
+             Lit p = mkLit(v, s);
+@@ -886,6 +1023,9 @@
+             vec<Watcher>& ws = watches[p];
+             for (int j = 0; j < ws.size(); j++)
+                 ca.reloc(ws[j].cref, to);
++            vec<Watcher>& ws_bin = watches_bin[p];
++            for (int j = 0; j < ws_bin.size(); j++)
++                ca.reloc(ws_bin[j].cref, to);
+         }
+ 
+     // All reasons:
+diff -ru minisat-2.2.0/core/Solver.h minisat2glucose/core/Solver.h
+--- minisat-2.2.0/core/Solver.h	2015-03-04 19:10:52.153915589 -0500
++++ minisat2glucose/core/Solver.h	2015-03-04 23:25:08.467305460 -0500
+@@ -1,6 +1,8 @@
+ /****************************************************************************************[Solver.h]
+-Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
+-Copyright (c) 2007-2010, Niklas Sorensson
++MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
++           Copyright (c) 2007-2010, Niklas Sorensson
++
++Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
+ 
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+ associated documentation files (the "Software"), to deal in the Software without restriction,
+@@ -21,6 +23,25 @@
+ #ifndef Minisat_Solver_h
+ #define Minisat_Solver_h
+ 
++#include <deque>
++
++#define GLUCOSE23
++//#define WIDE_WALK
++//#define EXTRA_VAR_ACT_BUMP
++//#define INT_QUEUE_AVG
++//#define REDUCE_BASE_BUG
++//#define ZERO_LEVEL_LBD
++//#define LOOSE_PROP_STAT
++
++#ifdef GLUCOSE23
++  #define WIDE_WALK
++  #define EXTRA_VAR_ACT_BUMP
++  #define INT_QUEUE_AVG
++  #define REDUCE_BASE_BUG
++  #define ZERO_LEVEL_LBD
++  #define LOOSE_PROP_STAT
++#endif
++
+ #include "mtl/Vec.h"
+ #include "mtl/Heap.h"
+ #include "mtl/Alg.h"
+@@ -34,6 +55,31 @@
+ // Solver -- the main class:
+ 
+ class Solver {
++private:
++    template<typename T>
++    class MyQueue {
++        int sz;
++        int64_t sum;
++        std::deque<T> q;
++    public:
++        MyQueue(int init_sz) : sz(init_sz), sum(0) { assert(sz > 0); }
++        inline bool   full () const { return q.size() == (unsigned) sz; }
++#ifdef INT_QUEUE_AVG
++        inline T      avg  () const { assert(full()); return sum / sz; }
++#else
++        inline double avg  () const { assert(full()); return sum / (double) sz; }
++#endif
++        inline void   clear()       { sum = 0; q.clear(); }
++        void push(T e) {
++            sum += e;
++            q.push_back(e);
++
++            if (q.size() > (unsigned) sz){
++                sum -= q.front();
++                q.pop_front(); }
++        }
++    };
++
+ public:
+ 
+     // Constructor/Destructor:
+@@ -175,6 +221,7 @@
+     vec<double>         activity;         // A heuristic measurement of the activity of a variable.
+     double              var_inc;          // Amount to bump next variable with.
+     OccLists<Lit, vec<Watcher>, WatcherDeleted>
++                        watches_bin,      // Watches for binary clauses only.
+                         watches;          // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
+     vec<lbool>          assigns;          // The current assignments.
+     vec<char>           polarity;         // The preferred polarity of each variable.
+@@ -190,6 +237,13 @@
+     double              progress_estimate;// Set by 'search()'.
+     bool                remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
+ 
++    float               global_lbd_sum;
++    MyQueue<int>        lbd_queue;        // For computing moving averages of recent LBD values.
++    MyQueue<int>        trail_sz_queue;   // Ditto, but for recent trail sizes (i.e., number of assigned variables).
++    int                 reduce_round;
++    uint64_t            reduce_base;      // Determines the next time of reduction.
++    uint64_t            next_reduce_at;
++
+     ClauseAllocator     ca;
+ 
+     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
+@@ -200,6 +254,9 @@
+     vec<Lit>            analyze_toclear;
+     vec<Lit>            add_tmp;
+ 
++    vec<uint64_t>       seen2;    // Mostly for efficient LBD computation. 'seen2[i]' will indicate if decision level or variable 'i' has been seen.
++    uint64_t            counter;  // Simple counter for marking purpose with 'seen2'.
++
+     double              max_learnts;
+     double              learntsize_adjust_confl;
+     int                 learntsize_adjust_cnt;
+@@ -219,7 +276,7 @@
+     bool     enqueue          (Lit p, CRef from = CRef_Undef);                         // Test if fact 'p' contradicts current state, enqueue otherwise.
+     CRef     propagate        ();                                                      // Perform unit propagation. Returns possibly conflicting clause.
+     void     cancelUntil      (int level);                                             // Backtrack until a certain level.
+-    void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel);    // (bt = backtrack)
++    void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& out_lbd);    // (bt = backtrack)
+     void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
+     bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
+     lbool    search           (int nof_conflicts);                                     // Search for a given number of conflicts.
+@@ -227,6 +284,7 @@
+     void     reduceDB         ();                                                      // Reduce the set of learnt clauses.
+     void     removeSatisfied  (vec<CRef>& cs);                                         // Shrink 'cs' to contain only non-satisfied clauses.
+     void     rebuildOrderHeap ();
++    bool     binResMinimize   (vec<Lit>& out_learnt);                                  // Further learnt clause minimization by binary resolution.
+ 
+     // Maintaining Variable/Clause activity:
+     //
+@@ -255,6 +313,23 @@
+     double   progressEstimate ()      const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
+     bool     withinBudget     ()      const;
+ 
++    template<class V> int computeLBD(const V& c) {
++        int lbd = 0;
++
++        counter++;
++        for (int i = 0; i < c.size(); i++){
++            int l = level(var(c[i]));
++#ifdef ZERO_LEVEL_LBD
++            if (seen2[l] != counter){
++#else
++            if (l != 0 && seen2[l] != counter){
++#endif
++                seen2[l] = counter;
++                lbd++; } }
++
++        return lbd;
++    }
++
+     // Static helpers:
+     //
+ 
+@@ -313,7 +388,10 @@
+ inline bool     Solver::addClause       (Lit p)                 { add_tmp.clear(); add_tmp.push(p); return addClause_(add_tmp); }
+ inline bool     Solver::addClause       (Lit p, Lit q)          { add_tmp.clear(); add_tmp.push(p); add_tmp.push(q); return addClause_(add_tmp); }
+ inline bool     Solver::addClause       (Lit p, Lit q, Lit r)   { add_tmp.clear(); add_tmp.push(p); add_tmp.push(q); add_tmp.push(r); return addClause_(add_tmp); }
+-inline bool     Solver::locked          (const Clause& c) const { return value(c[0]) == l_True && reason(var(c[0])) != CRef_Undef && ca.lea(reason(var(c[0]))) == &c; }
++inline bool     Solver::locked          (const Clause& c) const {
++    int i = c.size() != 2 ? 0 : (value(c[0]) == l_True ? 0 : 1);
++    return value(c[i]) == l_True && reason(var(c[i])) != CRef_Undef && ca.lea(reason(var(c[i]))) == &c;
++}
+ inline void     Solver::newDecisionLevel()                      { trail_lim.push(trail.size()); }
+ 
+ inline int      Solver::decisionLevel ()      const   { return trail_lim.size(); }
+diff -ru minisat-2.2.0/core/SolverTypes.h minisat2glucose/core/SolverTypes.h
+--- minisat-2.2.0/core/SolverTypes.h	2015-03-04 19:10:52.147915548 -0500
++++ minisat2glucose/core/SolverTypes.h	2015-03-04 23:25:01.224252553 -0500
+@@ -1,6 +1,8 @@
+ /***********************************************************************************[SolverTypes.h]
+-Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
+-Copyright (c) 2007-2010, Niklas Sorensson
++MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
++           Copyright (c) 2007-2010, Niklas Sorensson
++
++Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
+ 
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+ associated documentation files (the "Software"), to deal in the Software without restriction,
+@@ -126,7 +128,9 @@
+         unsigned learnt    : 1;
+         unsigned has_extra : 1;
+         unsigned reloced   : 1;
+-        unsigned size      : 27; }                            header;
++        unsigned lbd       : 26;
++        unsigned removable : 1;
++        unsigned size      : 32; }                            header;
+     union { Lit lit; float act; uint32_t abs; CRef rel; } data[0];
+ 
+     friend class ClauseAllocator;
+@@ -139,6 +143,8 @@
+         header.has_extra = use_extra;
+         header.reloced   = 0;
+         header.size      = ps.size();
++        header.lbd       = 0;
++        header.removable = 1;
+ 
+         for (int i = 0; i < ps.size(); i++) 
+             data[i].lit = ps[i];
+@@ -172,6 +178,11 @@
+     CRef         relocation  ()      const   { return data[0].rel; }
+     void         relocate    (CRef c)        { header.reloced = 1; data[0].rel = c; }
+ 
++    int          lbd         ()      const   { return header.lbd; }
++    void         set_lbd     (int lbd)       { header.lbd = lbd; }
++    bool         removable   ()      const   { return header.removable; }
++    void         removable   (bool b)        { header.removable = b ? 1 : 0; }
++
+     // NOTE: somewhat unsafe to change the clause in-place! Must manually call 'calcAbstraction' afterwards for
+     //       subsumption operations to behave correctly.
+     Lit&         operator [] (int i)         { return data[i].lit; }
+@@ -243,7 +254,11 @@
+         // Copy extra data-fields: 
+         // (This could be cleaned-up. Generalize Clause-constructor to be applicable here instead?)
+         to[cr].mark(c.mark());
+-        if (to[cr].learnt())         to[cr].activity() = c.activity();
++        if (to[cr].learnt()){
++            to[cr].activity() = c.activity();
++            to[cr].set_lbd(c.lbd());
++            to[cr].removable(c.removable());
++        }
+         else if (to[cr].has_extra()) to[cr].calcAbstraction();
+     }
+ };
+diff -ru minisat-2.2.0/LICENSE minisat2glucose/LICENSE
+--- minisat-2.2.0/LICENSE	2015-03-04 19:10:52.167915684 -0500
++++ minisat2glucose/LICENSE	2015-03-04 23:23:14.463471699 -0500
+@@ -1,6 +1,8 @@
+ MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
+            Copyright (c) 2007-2010  Niklas Sorensson
+ 
++Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
++
+ Permission is hereby granted, free of charge, to any person obtaining a
+ copy of this software and associated documentation files (the
+ "Software"), to deal in the Software without restriction, including
+diff -ru minisat-2.2.0/simp/SimpSolver.cc minisat2glucose/simp/SimpSolver.cc
+--- minisat-2.2.0/simp/SimpSolver.cc	2015-03-04 19:10:52.154915596 -0500
++++ minisat2glucose/simp/SimpSolver.cc	2015-03-05 12:04:41.701415862 -0500
+@@ -1,6 +1,8 @@
+ /***********************************************************************************[SimpSolver.cc]
+-Copyright (c) 2006,      Niklas Een, Niklas Sorensson
+-Copyright (c) 2007-2010, Niklas Sorensson
++MiniSat -- Copyright (c) 2006,      Niklas Een, Niklas Sorensson
++           Copyright (c) 2007-2010, Niklas Sorensson
++
++Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
+ 
+ Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+ associated documentation files (the "Software"), to deal in the Software without restriction,
+@@ -521,8 +523,10 @@
+     occurs[v].clear(true);
+     
+     // Free watchers lists for this variable, if possible:
+-    if (watches[ mkLit(v)].size() == 0) watches[ mkLit(v)].clear(true);
+-    if (watches[~mkLit(v)].size() == 0) watches[~mkLit(v)].clear(true);
++    watches_bin[ mkLit(v)].clear(true);
++    watches_bin[~mkLit(v)].clear(true);
++    watches[ mkLit(v)].clear(true);
++    watches[~mkLit(v)].clear(true);
+ 
+     return backwardSubsumptionCheck();
+ }
+@@ -584,6 +588,12 @@
+     else if (!use_simplification)
+         return true;
+ 
++    // TODO: remove.
++    int skip = clauses.size() > 4800000;
++    if (skip){
++        printf("c Too many clauses; skip preprocessing.\n");
++        goto cleanup; }
++
+     // Main simplification loop:
+     //
+     while (n_touched > 0 || bwdsub_assigns < trail.size() || elim_heap.size() > 0){

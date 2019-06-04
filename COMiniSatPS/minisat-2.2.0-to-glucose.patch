@@ -1,0 +1,309 @@
+diff -ru minisat-2.2.0/core/Solver.cc minisat-2.2.0-to-glucose/core/Solver.cc
+--- minisat-2.2.0/core/Solver.cc	2010-07-10 12:07:36.000000000 -0400
++++ minisat-2.2.0-to-glucose/core/Solver.cc	2015-02-03 10:38:35.106217495 -0500
+@@ -91,6 +91,13 @@
+   , progress_estimate  (0)
+   , remove_satisfied   (true)
+ 
++  , global_lbd_sum     (0)
++  , lbd_queue          (50)
++  , trail_sz_queue     (5000)
++  , reduce_base        (2000)
++  
++  , counter            (0)
++
+     // Resource constraints:
+     //
+   , conflict_budget    (-1)
+@@ -121,6 +128,7 @@
+     //activity .push(0);
+     activity .push(rnd_init_act ? drand(random_seed) * 0.00001 : 0);
+     seen     .push(0);
++    seen2    .push(0);
+     polarity .push(sign);
+     decision .push();
+     trail    .capacity(v+1);
+@@ -261,7 +269,7 @@
+ |        rest of literals. There may be others from the same level though.
+ |  
+ |________________________________________________________________________________________________@*/
+-void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
++void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& out_lbd)
+ {
+     int pathC = 0;
+     Lit p     = lit_Undef;
+@@ -278,6 +286,14 @@
+         if (c.learnt())
+             claBumpActivity(c);
+ 
++        // Update LBD if improved.
++        if (c.learnt() && c.lbd() > 2){
++            int lbd = computeLBD(c);
++            if (lbd + 1 < c.lbd()){
++                if (c.lbd() <= 30) c.removable(false); // Protect once from reduction.
++                c.set_lbd(lbd); }
++        }
++
+         for (int j = (p == lit_Undef) ? 0 : 1; j < c.size(); j++){
+             Lit q = c[j];
+ 
+@@ -335,6 +351,8 @@
+     out_learnt.shrink(i - j);
+     tot_literals += out_learnt.size();
+ 
++    out_lbd = computeLBD(out_learnt);
++
+     // Find correct backtrack level:
+     //
+     if (out_learnt.size() == 1)
+@@ -520,22 +538,33 @@
+     ClauseAllocator& ca;
+     reduceDB_lt(ClauseAllocator& ca_) : ca(ca_) {}
+     bool operator () (CRef x, CRef y) { 
+-        return ca[x].size() > 2 && (ca[y].size() == 2 || ca[x].activity() < ca[y].activity()); } 
++        if (ca[x].size() == 2) return 0;
++        if (ca[y].size() == 2) return 1;
++
++        if (ca[x].lbd() > ca[y].lbd()) return 1;
++        if (ca[x].lbd() < ca[y].lbd()) return 0;    
++    
++        return ca[x].activity() < ca[y].activity();
++    }    
+ };
+ void Solver::reduceDB()
+ {
+     int     i, j;
+-    double  extra_lim = cla_inc / learnts.size();    // Remove any clause below this activity
+ 
+     sort(learnts, reduceDB_lt(ca));
+-    // Don't delete binary or locked clauses. From the rest, delete clauses from the first half
+-    // and clauses with activity smaller than 'extra_lim':
++
++    if (ca[learnts[learnts.size() / 2]].lbd() <= 3) reduce_base += 1000;
++    if (ca[learnts.last()].lbd() > 5) reduce_base -= 1000;
++
++    int limit = learnts.size() / 2;
+     for (i = j = 0; i < learnts.size(); i++){
+         Clause& c = ca[learnts[i]];
+-        if (c.size() > 2 && !locked(c) && (i < learnts.size() / 2 || c.activity() < extra_lim))
++        if (c.size() > 2 && c.lbd() > 2 && c.removable() && !locked(c) && i < limit)
+             removeClause(learnts[i]);
+-        else
+-            learnts[j++] = learnts[i];
++        else{
++            if (!c.removable()) limit++;
++            c.removable(true);
++            learnts[j++] = learnts[i]; }
+     }
+     learnts.shrink(i - j);
+     checkGarbage();
+@@ -616,6 +645,7 @@
+     assert(ok);
+     int         backtrack_level;
+     int         conflictC = 0;
++    int         lbd;
+     vec<Lit>    learnt_clause;
+     starts++;
+ 
+@@ -626,14 +656,23 @@
+             conflicts++; conflictC++;
+             if (decisionLevel() == 0) return l_False;
+ 
++            trail_sz_queue.push(trail.size());
++            // Prevent restarts for a while if many variables are being assigned.
++            if (conflicts > 10000 && lbd_queue.full() && trail.size() > 1.4 * trail_sz_queue.avg())
++                lbd_queue.clear();
++
+             learnt_clause.clear();
+-            analyze(confl, learnt_clause, backtrack_level);
++            analyze(confl, learnt_clause, backtrack_level, lbd);
+             cancelUntil(backtrack_level);
+ 
++            lbd_queue.push(lbd);
++            global_lbd_sum += lbd;
++
+             if (learnt_clause.size() == 1){
+                 uncheckedEnqueue(learnt_clause[0]);
+             }else{
+                 CRef cr = ca.alloc(learnt_clause, true);
++                ca[cr].set_lbd(lbd);
+                 learnts.push(cr);
+                 attachClause(cr);
+                 claBumpActivity(ca[cr]);
+@@ -657,7 +696,8 @@
+ 
+         }else{
+             // NO CONFLICT
+-            if (nof_conflicts >= 0 && conflictC >= nof_conflicts || !withinBudget()){
++            if ((lbd_queue.full() && lbd_queue.avg() * 0.8 > global_lbd_sum / conflicts) || !withinBudget()){
++                lbd_queue.clear();
+                 // Reached bound on number of conflicts:
+                 progress_estimate = progressEstimate();
+                 cancelUntil(0);
+@@ -667,9 +707,10 @@
+             if (decisionLevel() == 0 && !simplify())
+                 return l_False;
+ 
+-            if (learnts.size()-nAssigns() >= max_learnts)
+-                // Reduce the set of learnt clauses:
++            static uint64_t next_reduce = reduce_base, round = 1;
++            if (conflicts >= next_reduce){
+                 reduceDB();
++                next_reduce = (++round) * (reduce_base += 1300); }
+ 
+             Lit next = lit_Undef;
+             while (decisionLevel() < assumptions.size()){
+@@ -769,12 +810,8 @@
+     }
+ 
+     // Search:
+-    int curr_restarts = 0;
+-    while (status == l_Undef){
+-        double rest_base = luby_restart ? luby(restart_inc, curr_restarts) : pow(restart_inc, curr_restarts);
+-        status = search(rest_base * restart_first);
+-        if (!withinBudget()) break;
+-        curr_restarts++;
++    while (status == l_Undef && withinBudget()){
++        status = search(0);
+     }
+ 
+     if (verbosity >= 1)
+diff -ru minisat-2.2.0/core/Solver.h minisat-2.2.0-to-glucose/core/Solver.h
+--- minisat-2.2.0/core/Solver.h	2010-07-10 12:07:36.000000000 -0400
++++ minisat-2.2.0-to-glucose/core/Solver.h	2015-02-03 10:40:08.909820772 -0500
+@@ -21,6 +21,8 @@
+ #ifndef Minisat_Solver_h
+ #define Minisat_Solver_h
+ 
++#include <deque>
++
+ #include "mtl/Vec.h"
+ #include "mtl/Heap.h"
+ #include "mtl/Alg.h"
+@@ -34,6 +36,27 @@
+ // Solver -- the main class:
+ 
+ class Solver {
++private:
++    template<typename T>
++    class MyQueue {
++        int sz;
++        int64_t sum;
++        std::deque<T> q;
++    public:
++        MyQueue(int init_sz) : sz(init_sz), sum(0) { assert(sz > 0); }
++        inline bool   full () const { return q.size() == (unsigned) sz; }
++        inline double avg  () const { assert(full()); return sum / (double) sz; }
++        inline void   clear()       { sum = 0; q.clear(); }
++        void push(T e) {
++            sum += e;
++            q.push_back(e);
++
++            if (q.size() > (unsigned) sz){
++                sum -= q.front();
++                q.pop_front(); }
++        }
++    };
++
+ public:
+ 
+     // Constructor/Destructor:
+@@ -190,6 +213,11 @@
+     double              progress_estimate;// Set by 'search()'.
+     bool                remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
+ 
++    double              global_lbd_sum;
++    MyQueue<int>        lbd_queue;        // For computing moving averages of recent LBD values.
++    MyQueue<int>        trail_sz_queue;   // Ditto, but for recent trail sizes (i.e., number of assigned variables).
++    uint64_t            reduce_base;      // Determines the next time of reduction.
++
+     ClauseAllocator     ca;
+ 
+     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
+@@ -200,6 +228,9 @@
+     vec<Lit>            analyze_toclear;
+     vec<Lit>            add_tmp;
+ 
++    vec<uint64_t>       seen2;    // Mostly for efficient LBD computation. 'seen2[i]' will indicate if decision level or variable 'i' has been seen.
++    uint64_t            counter;  // Simple counter for marking purpose with 'seen2'.
++
+     double              max_learnts;
+     double              learntsize_adjust_confl;
+     int                 learntsize_adjust_cnt;
+@@ -219,7 +250,7 @@
+     bool     enqueue          (Lit p, CRef from = CRef_Undef);                         // Test if fact 'p' contradicts current state, enqueue otherwise.
+     CRef     propagate        ();                                                      // Perform unit propagation. Returns possibly conflicting clause.
+     void     cancelUntil      (int level);                                             // Backtrack until a certain level.
+-    void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel);    // (bt = backtrack)
++    void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& out_lbd);    // (bt = backtrack)
+     void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
+     bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
+     lbool    search           (int nof_conflicts);                                     // Search for a given number of conflicts.
+@@ -255,6 +286,19 @@
+     double   progressEstimate ()      const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
+     bool     withinBudget     ()      const;
+ 
++    template<class V> int computeLBD(const V& c) {
++        int lbd = 0;
++
++        counter++;
++        for (int i = 0; i < c.size(); i++){
++            int l = level(var(c[i]));
++            if (l != 0 && seen2[l] != counter){
++                seen2[l] = counter;
++                lbd++; } }
++
++        return lbd;
++    }
++
+     // Static helpers:
+     //
+ 
+diff -ru minisat-2.2.0/core/SolverTypes.h minisat-2.2.0-to-glucose/core/SolverTypes.h
+--- minisat-2.2.0/core/SolverTypes.h	2010-07-10 12:07:36.000000000 -0400
++++ minisat-2.2.0-to-glucose/core/SolverTypes.h	2015-02-02 14:42:03.850542894 -0500
+@@ -126,7 +126,9 @@
+         unsigned learnt    : 1;
+         unsigned has_extra : 1;
+         unsigned reloced   : 1;
+-        unsigned size      : 27; }                            header;
++        unsigned lbd       : 26;
++        unsigned removable : 1;
++        unsigned size      : 32; }                            header;
+     union { Lit lit; float act; uint32_t abs; CRef rel; } data[0];
+ 
+     friend class ClauseAllocator;
+@@ -139,6 +141,8 @@
+         header.has_extra = use_extra;
+         header.reloced   = 0;
+         header.size      = ps.size();
++        header.lbd       = 0;
++        header.removable = 1;
+ 
+         for (int i = 0; i < ps.size(); i++) 
+             data[i].lit = ps[i];
+@@ -172,6 +176,11 @@
+     CRef         relocation  ()      const   { return data[0].rel; }
+     void         relocate    (CRef c)        { header.reloced = 1; data[0].rel = c; }
+ 
++    int          lbd         ()      const   { return header.lbd; }
++    void         set_lbd     (int lbd)       { header.lbd = lbd; }
++    bool         removable   ()      const   { return header.removable; }
++    void         removable   (bool b)        { header.removable = b ? 1 : 0; }
++
+     // NOTE: somewhat unsafe to change the clause in-place! Must manually call 'calcAbstraction' afterwards for
+     //       subsumption operations to behave correctly.
+     Lit&         operator [] (int i)         { return data[i].lit; }
+@@ -243,7 +252,11 @@
+         // Copy extra data-fields: 
+         // (This could be cleaned-up. Generalize Clause-constructor to be applicable here instead?)
+         to[cr].mark(c.mark());
+-        if (to[cr].learnt())         to[cr].activity() = c.activity();
++        if (to[cr].learnt()){
++            to[cr].activity() = c.activity();
++            to[cr].set_lbd(c.lbd());
++            to[cr].removable(c.removable());
++        }
+         else if (to[cr].has_extra()) to[cr].calcAbstraction();
+     }
+ };
