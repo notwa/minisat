@@ -1,0 +1,259 @@
+diff --git a/mtl/template.mk b/mtl/template.mk
+index db3327a..bce2b7b 100644
+--- a/mtl/template.mk
++++ b/mtl/template.mk
+@@ -91,19 +91,7 @@ allclean: clean
+ 	@rm -f ../simp/*.o ../simp/*.or ../simp/*.od  ../core/*.o ../core/*.or ../core/*.od
+ clean:
+ 	rm -f $(EXEC) $(EXEC)_profile $(EXEC)_debug $(EXEC)_release $(EXEC)_static \
+-	  $(COBJS) $(PCOBJS) $(DCOBJS) $(RCOBJS) *.core depend.mk 
+-
+-## Make dependencies
+-depend.mk: $(CSRCS) $(CHDRS)
+-	@echo Making dependencies
+-	@$(CXX) $(CFLAGS) -I$(MROOT) \
+-	   $(CSRCS) -MM | sed 's|\(.*\):|$(PWD)/\1 $(PWD)/\1r $(PWD)/\1d $(PWD)/\1p:|' > depend.mk
+-	@for dir in $(DEPDIR); do \
+-	      if [ -r $(MROOT)/$${dir}/depend.mk ]; then \
+-		  echo Depends on: $${dir}; \
+-		  cat $(MROOT)/$${dir}/depend.mk >> depend.mk; \
+-	      fi; \
+-	  done
++	  $(COBJS) $(PCOBJS) $(DCOBJS) $(RCOBJS) *.core
+ 
+ -include $(MROOT)/mtl/config.mk
+ -include depend.mk
+diff --git a/parallel/depend.mk b/parallel/depend.mk
+new file mode 100644
+index 0000000..74e1aeb
+--- /dev/null
++++ b/parallel/depend.mk
+@@ -0,0 +1,182 @@
++Main.o Main.or Main.od Main.op: Main.cc \
++ ../utils/System.h \
++ ../mtl/IntTypes.h \
++ ../utils/ParseUtils.h \
++ ../utils/Options.h \
++ ../mtl/Vec.h \
++ ../mtl/XAlloc.h \
++ ../core/Dimacs.h \
++ ../core/SolverTypes.h \
++ ../mtl/Alg.h \
++ ../mtl/Map.h \
++ ../mtl/Alloc.h \
++ ../simp/SimpSolver.h \
++ ../mtl/Queue.h \
++ ../core/Solver.h \
++ ../mtl/Heap.h \
++ ../core/BoundedQueue.h \
++ ../core/Constants.h \
++ ../mtl/Clone.h \
++ ../core/SolverStats.h \
++ ../parallel/ParallelSolver.h \
++ ../parallel/SharedCompanion.h \
++ ../parallel/SolverCompanion.h \
++ ../parallel/ClausesBuffer.h \
++ ../parallel/MultiSolvers.h
++SolverConfiguration.o SolverConfiguration.or SolverConfiguration.od SolverConfiguration.op: SolverConfiguration.cc \
++ ../parallel/MultiSolvers.h \
++ ../parallel/ParallelSolver.h \
++ ../core/SolverTypes.h \
++ ../mtl/IntTypes.h \
++ ../mtl/Alg.h \
++ ../mtl/Vec.h \
++ ../mtl/XAlloc.h \
++ ../mtl/Map.h \
++ ../mtl/Alloc.h \
++ ../core/Solver.h \
++ ../mtl/Heap.h \
++ ../utils/Options.h \
++ ../utils/ParseUtils.h \
++ ../core/BoundedQueue.h \
++ ../core/Constants.h \
++ ../mtl/Clone.h \
++ ../core/SolverStats.h \
++ ../simp/SimpSolver.h \
++ ../mtl/Queue.h \
++ ../parallel/SharedCompanion.h \
++ ../parallel/SolverCompanion.h \
++ ../parallel/ClausesBuffer.h \
++ ../parallel/SolverConfiguration.h
++SolverCompanion.o SolverCompanion.or SolverCompanion.od SolverCompanion.op: SolverCompanion.cc \
++ ../parallel/SolverCompanion.h \
++ ../mtl/Vec.h \
++ ../mtl/IntTypes.h \
++ ../mtl/XAlloc.h
++ParallelSolver.o ParallelSolver.or ParallelSolver.od ParallelSolver.op: ParallelSolver.cc \
++ ../parallel/ParallelSolver.h \
++ ../core/SolverTypes.h \
++ ../mtl/IntTypes.h \
++ ../mtl/Alg.h \
++ ../mtl/Vec.h \
++ ../mtl/XAlloc.h \
++ ../mtl/Map.h \
++ ../mtl/Alloc.h \
++ ../core/Solver.h \
++ ../mtl/Heap.h \
++ ../utils/Options.h \
++ ../utils/ParseUtils.h \
++ ../core/BoundedQueue.h \
++ ../core/Constants.h \
++ ../mtl/Clone.h \
++ ../core/SolverStats.h \
++ ../simp/SimpSolver.h \
++ ../mtl/Queue.h \
++ ../parallel/SharedCompanion.h \
++ ../parallel/SolverCompanion.h \
++ ../parallel/ClausesBuffer.h \
++ ../mtl/Sort.h
++ClausesBuffer.o ClausesBuffer.or ClausesBuffer.od ClausesBuffer.op: ClausesBuffer.cc \
++ ../parallel/ClausesBuffer.h \
++ ../mtl/Vec.h \
++ ../mtl/IntTypes.h \
++ ../mtl/XAlloc.h \
++ ../core/SolverTypes.h \
++ ../mtl/Alg.h \
++ ../mtl/Map.h \
++ ../mtl/Alloc.h \
++ ../core/Solver.h \
++ ../mtl/Heap.h \
++ ../utils/Options.h \
++ ../utils/ParseUtils.h \
++ ../core/BoundedQueue.h \
++ ../core/Constants.h \
++ ../mtl/Clone.h \
++ ../core/SolverStats.h
++SharedCompanion.o SharedCompanion.or SharedCompanion.od SharedCompanion.op: SharedCompanion.cc \
++ ../core/Solver.h \
++ ../mtl/Heap.h \
++ ../mtl/Vec.h \
++ ../mtl/IntTypes.h \
++ ../mtl/XAlloc.h \
++ ../mtl/Alg.h \
++ ../utils/Options.h \
++ ../utils/ParseUtils.h \
++ ../core/SolverTypes.h \
++ ../mtl/Map.h \
++ ../mtl/Alloc.h \
++ ../core/BoundedQueue.h \
++ ../core/Constants.h \
++ ../mtl/Clone.h \
++ ../core/SolverStats.h \
++ ../parallel/ParallelSolver.h \
++ ../simp/SimpSolver.h \
++ ../mtl/Queue.h \
++ ../parallel/SharedCompanion.h \
++ ../parallel/SolverCompanion.h \
++ ../parallel/ClausesBuffer.h
++MultiSolvers.o MultiSolvers.or MultiSolvers.od MultiSolvers.op: MultiSolvers.cc \
++ ../parallel/MultiSolvers.h \
++ ../parallel/ParallelSolver.h \
++ ../core/SolverTypes.h \
++ ../mtl/IntTypes.h \
++ ../mtl/Alg.h \
++ ../mtl/Vec.h \
++ ../mtl/XAlloc.h \
++ ../mtl/Map.h \
++ ../mtl/Alloc.h \
++ ../core/Solver.h \
++ ../mtl/Heap.h \
++ ../utils/Options.h \
++ ../utils/ParseUtils.h \
++ ../core/BoundedQueue.h \
++ ../core/Constants.h \
++ ../mtl/Clone.h \
++ ../core/SolverStats.h \
++ ../simp/SimpSolver.h \
++ ../mtl/Queue.h \
++ ../parallel/SharedCompanion.h \
++ ../parallel/SolverCompanion.h \
++ ../parallel/ClausesBuffer.h \
++ ../mtl/Sort.h \
++ ../utils/System.h \
++ ../parallel/SolverConfiguration.h
++../simp/Main.o ../simp/Main.or ../simp/Main.od ../simp/Main.op: ../simp/Main.cc \
++ ../utils/System.h \
++ ../mtl/IntTypes.h \
++ ../utils/ParseUtils.h \
++ ../utils/Options.h \
++ ../mtl/Vec.h \
++ ../mtl/XAlloc.h \
++ ../core/Dimacs.h \
++ ../core/SolverTypes.h \
++ ../mtl/Alg.h \
++ ../mtl/Map.h \
++ ../mtl/Alloc.h \
++ ../simp/SimpSolver.h \
++ ../mtl/Queue.h \
++ ../core/Solver.h \
++ ../mtl/Heap.h \
++ ../core/BoundedQueue.h \
++ ../core/Constants.h \
++ ../mtl/Clone.h \
++ ../core/SolverStats.h
++../simp/SimpSolver.o ../simp/SimpSolver.or ../simp/SimpSolver.od ../simp/SimpSolver.op: ../simp/SimpSolver.cc \
++ ../mtl/Sort.h \
++ ../mtl/Vec.h \
++ ../mtl/IntTypes.h \
++ ../mtl/XAlloc.h \
++ ../simp/SimpSolver.h \
++ ../mtl/Queue.h \
++ ../core/Solver.h \
++ ../mtl/Heap.h \
++ ../mtl/Alg.h \
++ ../utils/Options.h \
++ ../utils/ParseUtils.h \
++ ../core/SolverTypes.h \
++ ../mtl/Map.h \
++ ../mtl/Alloc.h \
++ ../core/BoundedQueue.h \
++ ../core/Constants.h \
++ ../mtl/Clone.h \
++ ../core/SolverStats.h \
++ ../utils/System.h
+diff --git a/simp/depend.mk b/simp/depend.mk
+new file mode 100644
+index 0000000..bcac9c0
+--- /dev/null
++++ b/simp/depend.mk
+@@ -0,0 +1,40 @@
++Main.o Main.or Main.od Main.op: Main.cc \
++ ../utils/System.h \
++ ../mtl/IntTypes.h \
++ ../utils/ParseUtils.h \
++ ../utils/Options.h \
++ ../mtl/Vec.h \
++ ../mtl/XAlloc.h \
++ ../core/Dimacs.h \
++ ../core/SolverTypes.h \
++ ../mtl/Alg.h \
++ ../mtl/Map.h \
++ ../mtl/Alloc.h \
++ ../simp/SimpSolver.h \
++ ../mtl/Queue.h \
++ ../core/Solver.h \
++ ../mtl/Heap.h \
++ ../core/BoundedQueue.h \
++ ../core/Constants.h \
++ ../mtl/Clone.h \
++ ../core/SolverStats.h
++SimpSolver.o SimpSolver.or SimpSolver.od SimpSolver.op: SimpSolver.cc \
++ ../mtl/Sort.h \
++ ../mtl/Vec.h \
++ ../mtl/IntTypes.h \
++ ../mtl/XAlloc.h \
++ ../simp/SimpSolver.h \
++ ../mtl/Queue.h \
++ ../core/Solver.h \
++ ../mtl/Heap.h \
++ ../mtl/Alg.h \
++ ../utils/Options.h \
++ ../utils/ParseUtils.h \
++ ../core/SolverTypes.h \
++ ../mtl/Map.h \
++ ../mtl/Alloc.h \
++ ../core/BoundedQueue.h \
++ ../core/Constants.h \
++ ../mtl/Clone.h \
++ ../core/SolverStats.h \
++ ../utils/System.h
