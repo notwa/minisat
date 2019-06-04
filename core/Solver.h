@@ -21,6 +21,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef Minisat_Solver_h
 #define Minisat_Solver_h
 
+#include <deque>
+
 #include "mtl/Vec.h"
 #include "mtl/Heap.h"
 #include "mtl/Alg.h"
@@ -34,6 +36,27 @@ namespace Minisat {
 // Solver -- the main class:
 
 class Solver {
+private:
+    template<typename T>
+    class MyQueue {
+        int sz;
+        int64_t sum;
+        std::deque<T> q;
+    public:
+        MyQueue(int init_sz) : sz(init_sz), sum(0) { assert(sz > 0); }
+        inline bool   full () const { return q.size() == (unsigned) sz; }
+        inline double avg  () const { assert(full()); return sum / (double) sz; }
+        inline void   clear()       { sum = 0; q.clear(); }
+        void push(T e) {
+            sum += e;
+            q.push_back(e);
+
+            if (q.size() > (unsigned) sz){
+                sum -= q.front();
+                q.pop_front(); }
+        }
+    };
+
 public:
 
     // Constructor/Destructor:
@@ -190,6 +213,11 @@ protected:
     double              progress_estimate;// Set by 'search()'.
     bool                remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
 
+    double              global_lbd_sum;
+    MyQueue<int>        lbd_queue;        // For computing moving averages of recent LBD values.
+    MyQueue<int>        trail_sz_queue;   // Ditto, but for recent trail sizes (i.e., number of assigned variables).
+    uint64_t            reduce_base;      // Determines the next time of reduction.
+
     ClauseAllocator     ca;
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
@@ -199,6 +227,9 @@ protected:
     vec<Lit>            analyze_stack;
     vec<Lit>            analyze_toclear;
     vec<Lit>            add_tmp;
+
+    vec<uint64_t>       seen2;    // Mostly for efficient LBD computation. 'seen2[i]' will indicate if decision level or variable 'i' has been seen.
+    uint64_t            counter;  // Simple counter for marking purpose with 'seen2'.
 
     double              max_learnts;
     double              learntsize_adjust_confl;
@@ -219,7 +250,7 @@ protected:
     bool     enqueue          (Lit p, CRef from = CRef_Undef);                         // Test if fact 'p' contradicts current state, enqueue otherwise.
     CRef     propagate        ();                                                      // Perform unit propagation. Returns possibly conflicting clause.
     void     cancelUntil      (int level);                                             // Backtrack until a certain level.
-    void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel);    // (bt = backtrack)
+    void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& out_lbd);    // (bt = backtrack)
     void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
     bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
     lbool    search           (int nof_conflicts);                                     // Search for a given number of conflicts.
@@ -254,6 +285,19 @@ protected:
     int      level            (Var x) const;
     double   progressEstimate ()      const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
     bool     withinBudget     ()      const;
+
+    template<class V> int computeLBD(const V& c) {
+        int lbd = 0;
+
+        counter++;
+        for (int i = 0; i < c.size(); i++){
+            int l = level(var(c[i]));
+            if (l != 0 && seen2[l] != counter){
+                seen2[l] = counter;
+                lbd++; } }
+
+        return lbd;
+    }
 
     // Static helpers:
     //

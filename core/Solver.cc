@@ -91,6 +91,13 @@ Solver::Solver() :
   , progress_estimate  (0)
   , remove_satisfied   (true)
 
+  , global_lbd_sum     (0)
+  , lbd_queue          (50)
+  , trail_sz_queue     (5000)
+  , reduce_base        (2000)
+  
+  , counter            (0)
+
     // Resource constraints:
     //
   , conflict_budget    (-1)
@@ -121,6 +128,7 @@ Var Solver::newVar(bool sign, bool dvar)
     //activity .push(0);
     activity .push(rnd_init_act ? drand(random_seed) * 0.00001 : 0);
     seen     .push(0);
+    seen2    .push(0);
     polarity .push(sign);
     decision .push();
     trail    .capacity(v+1);
@@ -261,7 +269,7 @@ Lit Solver::pickBranchLit()
 |        rest of literals. There may be others from the same level though.
 |  
 |________________________________________________________________________________________________@*/
-void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
+void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& out_lbd)
 {
     int pathC = 0;
     Lit p     = lit_Undef;
@@ -277,6 +285,14 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
 
         if (c.learnt())
             claBumpActivity(c);
+
+        // Update LBD if improved.
+        if (c.learnt() && c.lbd() > 2){
+            int lbd = computeLBD(c);
+            if (lbd + 1 < c.lbd()){
+                if (c.lbd() <= 30) c.removable(false); // Protect once from reduction.
+                c.set_lbd(lbd); }
+        }
 
         for (int j = (p == lit_Undef) ? 0 : 1; j < c.size(); j++){
             Lit q = c[j];
@@ -334,6 +350,8 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
     max_literals += out_learnt.size();
     out_learnt.shrink(i - j);
     tot_literals += out_learnt.size();
+
+    out_lbd = computeLBD(out_learnt);
 
     // Find correct backtrack level:
     //
@@ -520,22 +538,33 @@ struct reduceDB_lt {
     ClauseAllocator& ca;
     reduceDB_lt(ClauseAllocator& ca_) : ca(ca_) {}
     bool operator () (CRef x, CRef y) { 
-        return ca[x].size() > 2 && (ca[y].size() == 2 || ca[x].activity() < ca[y].activity()); } 
+        if (ca[x].size() == 2) return 0;
+        if (ca[y].size() == 2) return 1;
+
+        if (ca[x].lbd() > ca[y].lbd()) return 1;
+        if (ca[x].lbd() < ca[y].lbd()) return 0;    
+    
+        return ca[x].activity() < ca[y].activity();
+    }    
 };
 void Solver::reduceDB()
 {
     int     i, j;
-    double  extra_lim = cla_inc / learnts.size();    // Remove any clause below this activity
 
     sort(learnts, reduceDB_lt(ca));
-    // Don't delete binary or locked clauses. From the rest, delete clauses from the first half
-    // and clauses with activity smaller than 'extra_lim':
+
+    if (ca[learnts[learnts.size() / 2]].lbd() <= 3) reduce_base += 1000;
+    if (ca[learnts.last()].lbd() > 5) reduce_base -= 1000;
+
+    int limit = learnts.size() / 2;
     for (i = j = 0; i < learnts.size(); i++){
         Clause& c = ca[learnts[i]];
-        if (c.size() > 2 && !locked(c) && (i < learnts.size() / 2 || c.activity() < extra_lim))
+        if (c.size() > 2 && c.lbd() > 2 && c.removable() && !locked(c) && i < limit)
             removeClause(learnts[i]);
-        else
-            learnts[j++] = learnts[i];
+        else{
+            if (!c.removable()) limit++;
+            c.removable(true);
+            learnts[j++] = learnts[i]; }
     }
     learnts.shrink(i - j);
     checkGarbage();
@@ -616,6 +645,7 @@ lbool Solver::search(int nof_conflicts)
     assert(ok);
     int         backtrack_level;
     int         conflictC = 0;
+    int         lbd;
     vec<Lit>    learnt_clause;
     starts++;
 
@@ -626,14 +656,23 @@ lbool Solver::search(int nof_conflicts)
             conflicts++; conflictC++;
             if (decisionLevel() == 0) return l_False;
 
+            trail_sz_queue.push(trail.size());
+            // Prevent restarts for a while if many variables are being assigned.
+            if (conflicts > 10000 && lbd_queue.full() && trail.size() > 1.4 * trail_sz_queue.avg())
+                lbd_queue.clear();
+
             learnt_clause.clear();
-            analyze(confl, learnt_clause, backtrack_level);
+            analyze(confl, learnt_clause, backtrack_level, lbd);
             cancelUntil(backtrack_level);
+
+            lbd_queue.push(lbd);
+            global_lbd_sum += lbd;
 
             if (learnt_clause.size() == 1){
                 uncheckedEnqueue(learnt_clause[0]);
             }else{
                 CRef cr = ca.alloc(learnt_clause, true);
+                ca[cr].set_lbd(lbd);
                 learnts.push(cr);
                 attachClause(cr);
                 claBumpActivity(ca[cr]);
@@ -657,7 +696,8 @@ lbool Solver::search(int nof_conflicts)
 
         }else{
             // NO CONFLICT
-            if (nof_conflicts >= 0 && conflictC >= nof_conflicts || !withinBudget()){
+            if ((lbd_queue.full() && lbd_queue.avg() * 0.8 > global_lbd_sum / conflicts) || !withinBudget()){
+                lbd_queue.clear();
                 // Reached bound on number of conflicts:
                 progress_estimate = progressEstimate();
                 cancelUntil(0);
@@ -667,9 +707,10 @@ lbool Solver::search(int nof_conflicts)
             if (decisionLevel() == 0 && !simplify())
                 return l_False;
 
-            if (learnts.size()-nAssigns() >= max_learnts)
-                // Reduce the set of learnt clauses:
+            static uint64_t next_reduce = reduce_base, round = 1;
+            if (conflicts >= next_reduce){
                 reduceDB();
+                next_reduce = (++round) * (reduce_base += 1300); }
 
             Lit next = lit_Undef;
             while (decisionLevel() < assumptions.size()){
@@ -769,12 +810,8 @@ lbool Solver::solve_()
     }
 
     // Search:
-    int curr_restarts = 0;
-    while (status == l_Undef){
-        double rest_base = luby_restart ? luby(restart_inc, curr_restarts) : pow(restart_inc, curr_restarts);
-        status = search(rest_base * restart_first);
-        if (!withinBudget()) break;
-        curr_restarts++;
+    while (status == l_Undef && withinBudget()){
+        status = search(0);
     }
 
     if (verbosity >= 1)
