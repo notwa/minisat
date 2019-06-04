@@ -7,6 +7,8 @@ Copyright © 2003-2006 Niklas Eén, Copyright © 2003-2010 Niklas Sörensson,
 and distributed under the terms of [the MIT license.][license_mit]
 You may be wondering, [what is this?](#what-is-this)
 
+## Included Versions
+
 In the [master branch,][master] a version based on [Niklas's most recent work][upstream]
 is patched and ready to compile with modern compilers.
 
