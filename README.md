@@ -14,6 +14,9 @@ In the [patches branch,][patches] various patch files have been archived.
 In the [COMiniSatPS branch,][comsps] Chanseok Oh's patches have been applied
 to version 2.2.0. [Visit the COMiniSatPS homepage. (archived)][comsps_archive]
 
+In the [minisat-to-glucose branch,][ms2glu] Chanseok Oh's other set of patches
+have been applied to version 2.2.0.
+
 The ubiquitous [version 2.2.0 is available here,][v220]
 and the earlier [version 2.0 is available here.][v200]
 Earlier than that, a few select versions
@@ -29,6 +32,7 @@ Select "Download Zip" if you're not familiar with git.
 [patches]: https://github.com/notwa/minisat/tree/patches
 [comsps]: https://github.com/notwa/minisat/tree/COMiniSatPS
 [comsps_archive]: https://web.archive.org/web/20171023151341/http://www.cs.nyu.edu/~chanseok/cominisatps/
+[ms2glu]: https://github.com/notwa/minisat/tree/minisat-to-glucose
 [license_mit]: https://choosealicense.com/licenses/mit/
 [v220]: https://github.com/notwa/minisat/tree/releases/2.2.0
 [v200]: https://github.com/notwa/minisat/tree/releases/2.0.0
