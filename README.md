@@ -25,8 +25,9 @@ just above the dates. Select "Download Zip" if you're not familiar with git.
 
 [homepage]: http://minisat.se/MiniSat.html
 [master]: https://github.com/notwa/minisat/tree/master
-[upstream]: https://github.com/niklasso/minisat
-[comsps]: https://github.com/notwa/minisat/tree/comsps
+[upstream]: https://github.com/niklasso/minisat/tree/master
+[patches]: https://github.com/notwa/minisat/tree/patches
+[comsps]: https://github.com/notwa/minisat/tree/COMiniSatPS
 [comsps_archive]: https://web.archive.org/web/20171023151341/http://www.cs.nyu.edu/~chanseok/cominisatps/
 [license_mit]: https://choosealicense.com/licenses/mit/
 [v220]: https://github.com/notwa/minisat/tree/releases/2.2.0
@@ -58,7 +59,7 @@ but for the time being, there are:
   submitted to [the SAT Competition of 2017.][comp2017]
 
 * [MiniSat derivatives from 2018][solvers2018]
-  submitted to [the SAT Competition of 2018.][comp2017]
+  submitted to [the SAT Competition of 2018.][comp2018]
 
 * MiniSat derivatives will surely make an appearance in
   [the upcoming (July) SAT Race of 2019.][race2019]
