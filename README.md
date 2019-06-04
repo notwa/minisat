@@ -25,6 +25,19 @@ and the earlier [version 2.0 is available here.][v200]
 Earlier than that, a few select versions
 are available on [the MiniSat homepage.][homepage]
 
+In the [glucose-1.0 branch,][glu10] `glucose_1.0.zip`
+via [the glucose homepage][glucose] has been applied to [MiniSat 2.0.][v200]
+
+Similarily, in the remaining glucose branches,
+the appropriate glucose versions have been applied to [MiniSat 2.2.0:][v220]
+[glucose-2.0][glu20] (`glucose-2-compet.tgz`),
+[glucose-2.1][glu21] (`glucose2.1.tgz`),
+[glucose-3.0][glu30] (`glucose-3.0.tgz`),
+[glucose-4.0][glu40] (`glucose-syrup.tgz`), and
+[glucose-4.1][glu41] (`glucose-syrup-4.1.tgz`).
+Compared to the original releases, some unwanted files
+that had slipped in have been removed, and missing licenses have been restored.
+
 You can download any of the versions on GitHub by following the appropriate link
 and clicking on the green "Clone or download" link on the top right.
 Select "Download Zip" if you're not familiar with git.
@@ -39,6 +52,13 @@ Select "Download Zip" if you're not familiar with git.
 [license_mit]: https://choosealicense.com/licenses/mit/
 [v220]: https://github.com/notwa/minisat/tree/releases/2.2.0
 [v200]: https://github.com/notwa/minisat/tree/releases/2.0.0
+[glucose]: https://www.labri.fr/perso/lsimon/glucose/
+[glu10]: https://github.com/notwa/minisat/tree/glucose-1.0
+[glu20]: https://github.com/notwa/minisat/tree/glucose-2.0
+[glu21]: https://github.com/notwa/minisat/tree/glucose-2.1
+[glu30]: https://github.com/notwa/minisat/tree/glucose-3.0
+[glu40]: https://github.com/notwa/minisat/tree/glucose-4.0
+[glu41]: https://github.com/notwa/minisat/tree/glucose-4.1
 
 ## Other Versions
 
@@ -46,7 +66,6 @@ These versions have been omitted from this repository
 because they are already readily accessible.
 
 [cms]: https://github.com/msoos/cryptominisat
-[glucose]: https://www.labri.fr/perso/lsimon/glucose/
 [maple]: https://sites.google.com/a/gsd.uwaterloo.ca/maplesat/
 
 ### CryptoMiniSat
