@@ -104,11 +104,10 @@ is given by Dennis Yurichev's [SAT/SMT by Example.][example]
 Further information (and slightly dated resources)
 is available in [SATLIB — The Satisfiability Library.][satlib]
 
-In particular, MiniSat is a popular basis for experimenting with
+MiniSat is a popular basis for experimenting with
 new ideas to solve problems more efficiently,
 due to the software's code being relatively short and simple.
-
-MiniSat's many variations have ranked on or won [many competitions,][satcomp]
+MiniSat's many derivatives have ranked on or won [many competitions,][satcomp]
 under many names such as [COMSPS,][comsps_archive] [Glucose,][glucose]
 [Maple,][maple] and more.
 
@@ -118,7 +117,7 @@ the latter being an SMT solver.
 
 [SAT]: https://en.wikipedia.org/wiki/Boolean_satisfiability_problem#Algorithms_for_solving_SAT
 [BSP]: https://en.wikipedia.org/wiki/Boolean_satisfiability_problem
-[NP]: https://en.wikipedia.org/wiki/NP-complete
+[NP]: https://en.wikipedia.org/wiki/NP-completeness
 [SMT]: https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
 [STP]: https://github.com/stp/stp/
 [CNF]: https://en.wikipedia.org/wiki/Conjunctive_normal_form
