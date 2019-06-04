@@ -83,6 +83,7 @@ Solver::Solver() :
   , ok                 (true)
   , cla_inc            (1)
   , var_inc            (1)
+  , watches_bin        (WatcherDeleted(ca))
   , watches            (WatcherDeleted(ca))
   , qhead              (0)
   , simpDB_assigns     (-1)
@@ -121,6 +122,8 @@ Solver::~Solver()
 Var Solver::newVar(bool sign, bool dvar)
 {
     int v = nVars();
+    watches_bin.init(mkLit(v, false));
+    watches_bin.init(mkLit(v, true ));
     watches  .init(mkLit(v, false));
     watches  .init(mkLit(v, true ));
     assigns  .push(l_Undef);
@@ -170,8 +173,9 @@ bool Solver::addClause_(vec<Lit>& ps)
 void Solver::attachClause(CRef cr) {
     const Clause& c = ca[cr];
     assert(c.size() > 1);
-    watches[~c[0]].push(Watcher(cr, c[1]));
-    watches[~c[1]].push(Watcher(cr, c[0]));
+    OccLists<Lit, vec<Watcher>, WatcherDeleted>& ws = c.size() == 2 ? watches_bin : watches;
+    ws[~c[0]].push(Watcher(cr, c[1]));
+    ws[~c[1]].push(Watcher(cr, c[0]));
     if (c.learnt()) learnts_literals += c.size();
     else            clauses_literals += c.size(); }
 
@@ -179,14 +183,15 @@ void Solver::attachClause(CRef cr) {
 void Solver::detachClause(CRef cr, bool strict) {
     const Clause& c = ca[cr];
     assert(c.size() > 1);
+    OccLists<Lit, vec<Watcher>, WatcherDeleted>& ws = c.size() == 2 ? watches_bin : watches;
     
     if (strict){
-        remove(watches[~c[0]], Watcher(cr, c[1]));
-        remove(watches[~c[1]], Watcher(cr, c[0]));
+        remove(ws[~c[0]], Watcher(cr, c[1]));
+        remove(ws[~c[1]], Watcher(cr, c[0]));
     }else{
         // Lazy detaching: (NOTE! Must clean all watcher lists before garbage collecting this clause)
-        watches.smudge(~c[0]);
-        watches.smudge(~c[1]);
+        ws.smudge(~c[0]);
+        ws.smudge(~c[1]);
     }
 
     if (c.learnt()) learnts_literals -= c.size();
@@ -197,7 +202,9 @@ void Solver::removeClause(CRef cr) {
     Clause& c = ca[cr];
     detachClause(cr);
     // Don't leave pointers to free'd memory!
-    if (locked(c)) vardata[var(c[0])].reason = CRef_Undef;
+    if (locked(c)){
+        Lit implied = c.size() != 2 ? c[0] : (value(c[0]) == l_True ? c[0] : c[1]);
+        vardata[var(implied)].reason = CRef_Undef; }
     c.mark(1); 
     ca.free(cr);
 }
@@ -283,6 +290,12 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& ou
         assert(confl != CRef_Undef); // (otherwise should be UIP)
         Clause& c = ca[confl];
 
+        // For binary clauses, we don't rearrange literals in propagate(), so check and make sure the first is an implied lit.
+        if (p != lit_Undef && c.size() == 2 && value(c[0]) == l_False){
+            assert(value(c[1]) == l_True);
+            Lit tmp = c[0];
+            c[0] = c[1], c[1] = tmp; }
+
         if (c.learnt())
             claBumpActivity(c);
 
@@ -338,7 +351,7 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& ou
                 out_learnt[j++] = out_learnt[i];
             else{
                 Clause& c = ca[reason(var(out_learnt[i]))];
-                for (int k = 1; k < c.size(); k++)
+                for (int k = c.size() == 2 ? 0 : 1; k < c.size(); k++)
                     if (!seen[var(c[k])] && level(var(c[k])) > 0){
                         out_learnt[j++] = out_learnt[i];
                         break; }
@@ -352,6 +365,9 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& ou
     tot_literals += out_learnt.size();
 
     out_lbd = computeLBD(out_learnt);
+    if (out_lbd <= 6 && out_learnt.size() <= 30) // Try further minimization?
+        if (binResMinimize(out_learnt))
+            out_lbd = computeLBD(out_learnt); // Recompute LBD if minimized.
 
     // Find correct backtrack level:
     //
@@ -374,6 +390,39 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel, int& ou
 }
 
 
+// Try further learnt clause minimization by means of binary clause resolution.
+bool Solver::binResMinimize(vec<Lit>& out_learnt)
+{
+    // Preparation: remember which false variables we have in 'out_learnt'.
+    counter++;
+    for (int i = 1; i < out_learnt.size(); i++)
+        seen2[var(out_learnt[i])] = counter;
+
+    // Get the list of binary clauses containing 'out_learnt[0]'.
+    const vec<Watcher>& ws = watches_bin[~out_learnt[0]];
+
+    int to_remove = 0;
+    for (int i = 0; i < ws.size(); i++){
+        Lit the_other = ws[i].blocker;
+        // Does 'the_other' appear negatively in 'out_learnt'?
+        if (seen2[var(the_other)] == counter && value(the_other) == l_True){
+            to_remove++;
+            seen2[var(the_other)] = counter - 1; // Remember to remove this variable.
+        }
+    }
+
+    // Shrink.
+    if (to_remove > 0){
+        int last = out_learnt.size() - 1;
+        for (int i = 1; i < out_learnt.size() - to_remove; i++)
+            if (seen2[var(out_learnt[i])] != counter)
+                out_learnt[i--] = out_learnt[last--];
+        out_learnt.shrink(to_remove);
+    }
+    return to_remove != 0;
+}
+
+
 // Check if 'p' can be removed. 'abstract_levels' is used to abort early if the algorithm is
 // visiting literals at levels that cannot be removed later.
 bool Solver::litRedundant(Lit p, uint32_t abstract_levels)
@@ -383,6 +432,12 @@ bool Solver::litRedundant(Lit p, uint32_t abstract_levels)
     while (analyze_stack.size() > 0){
         assert(reason(var(analyze_stack.last())) != CRef_Undef);
         Clause& c = ca[reason(var(analyze_stack.last()))]; analyze_stack.pop();
+
+        // Special handling for binary clauses like in 'analyze()'.
+        if (c.size() == 2 && value(c[0]) == l_False){
+            assert(value(c[1]) == l_True);
+            Lit tmp = c[0];
+            c[0] = c[1], c[1] = tmp; }
 
         for (int i = 1; i < c.size(); i++){
             Lit p  = c[i];
@@ -432,7 +487,7 @@ void Solver::analyzeFinal(Lit p, vec<Lit>& out_conflict)
                 out_conflict.push(~trail[i]);
             }else{
                 Clause& c = ca[reason(x)];
-                for (int j = 1; j < c.size(); j++)
+                for (int j = c.size() == 2 ? 0 : 1; j < c.size(); j++)
                     if (level(var(c[j])) > 0)
                         seen[var(c[j])] = 1;
             }
@@ -469,12 +524,23 @@ CRef Solver::propagate()
     CRef    confl     = CRef_Undef;
     int     num_props = 0;
     watches.cleanAll();
+    watches_bin.cleanAll();
 
     while (qhead < trail.size()){
         Lit            p   = trail[qhead++];     // 'p' is enqueued fact to propagate.
         vec<Watcher>&  ws  = watches[p];
         Watcher        *i, *j, *end;
         num_props++;
+
+        vec<Watcher>& ws_bin = watches_bin[p];  // Propagate binary clauses first.
+        for (int k = 0; k < ws_bin.size(); k++){
+            Lit the_other = ws_bin[k].blocker;
+            if (value(the_other) == l_False){
+                confl = ws_bin[k].cref;
+                goto ExitProp;
+            }else if(value(the_other) == l_Undef)
+                uncheckedEnqueue(the_other, ws_bin[k].cref);
+        }
 
         for (i = j = (Watcher*)ws, end = i + ws.size();  i != end;){
             // Try to avoid inspecting the clause:
@@ -519,6 +585,8 @@ CRef Solver::propagate()
         }
         ws.shrink(i - j);
     }
+
+ExitProp:;
     propagations += num_props;
     simpDB_props -= num_props;
 
@@ -916,6 +984,7 @@ void Solver::relocAll(ClauseAllocator& to)
     //
     // for (int i = 0; i < watches.size(); i++)
     watches.cleanAll();
+    watches_bin.cleanAll();
     for (int v = 0; v < nVars(); v++)
         for (int s = 0; s < 2; s++){
             Lit p = mkLit(v, s);
@@ -923,6 +992,9 @@ void Solver::relocAll(ClauseAllocator& to)
             vec<Watcher>& ws = watches[p];
             for (int j = 0; j < ws.size(); j++)
                 ca.reloc(ws[j].cref, to);
+            vec<Watcher>& ws_bin = watches_bin[p];
+            for (int j = 0; j < ws_bin.size(); j++)
+                ca.reloc(ws_bin[j].cref, to);
         }
 
     // All reasons:
