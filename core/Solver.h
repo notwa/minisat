@@ -23,15 +23,14 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef Minisat_Solver_h
 #define Minisat_Solver_h
 
+#define ANTI_EXPLORATION
 #define BIN_DRUP
 
 #define GLUCOSE23
-//#define EXTRA_VAR_ACT_BUMP
 //#define INT_QUEUE_AVG
 //#define LOOSE_PROP_STAT
 
 #ifdef GLUCOSE23
-  #define EXTRA_VAR_ACT_BUMP
   #define INT_QUEUE_AVG
   #define LOOSE_PROP_STAT
 #endif
@@ -100,7 +99,7 @@ public:
 
     // Solving:
     //
-    bool    simplify     (bool do_stamping = false); // Removes already satisfied clauses.
+    bool    simplify     ();                        // Removes already satisfied clauses.
     bool    solve        (const vec<Lit>& assumps); // Search for a model that respects a given set of assumptions.
     lbool   solveLimited (const vec<Lit>& assumps); // Search for a model that respects a given set of assumptions (With resource constraints).
     bool    solve        ();                        // Search without assumptions.
@@ -160,12 +159,15 @@ public:
     //
     FILE*     drup_file;
     int       verbosity;
-    double    var_decay_no_r;
-    double    var_decay_glue_r;
+    double    step_size;
+    double    step_size_dec;
+    double    min_step_size;
+    int       timer;
+    double    var_decay;
     double    clause_decay;
     double    random_var_freq;
     double    random_seed;
-    bool      glucose_restart;
+    bool      VSIDS;
     int       ccmin_mode;         // Controls conflict clause minimization (0=none, 1=basic, 2=deep).
     int       phase_saving;       // Controls the level of phase saving (0=none, 1=limited, 2=full).
     bool      rnd_pol;            // Use random polarities for branching heuristics.
@@ -182,8 +184,15 @@ public:
 
     // Statistics: (read-only member variable)
     //
-    uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts, conflicts_glue;
+    uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts, conflicts_VSIDS;
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
+
+    vec<uint32_t> picked;
+    vec<uint32_t> conflicted;
+    vec<uint32_t> almost_conflicted;
+#ifdef ANTI_EXPLORATION
+    vec<uint32_t> canceled;
+#endif
 
 protected:
 
@@ -221,10 +230,9 @@ protected:
                         learnts_tier2,
                         learnts_local;
     double              cla_inc;          // Amount to bump next clause with.
-    vec<double>         activity_no_r,    // A heuristic measurement of the activity of a variable.
-                        activity_glue_r;
-    double              var_inc_no_r,     // Amount to bump next variable with.
-                        var_inc_glue_r;
+    vec<double>         activity_CHB,     // A heuristic measurement of the activity of a variable.
+                        activity_VSIDS;
+    double              var_inc;          // Amount to bump next variable with.
     OccLists<Lit, vec<Watcher>, WatcherDeleted>
                         watches_bin,      // Watches for binary clauses only.
                         watches;          // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
@@ -238,14 +246,14 @@ protected:
     int                 simpDB_assigns;   // Number of top-level assignments since last execution of 'simplify()'.
     int64_t             simpDB_props;     // Remaining number of propagations that must be made before next execution of 'simplify()'.
     vec<Lit>            assumptions;      // Current set of assumptions provided to solve by the user.
-    Heap<VarOrderLt>    order_heap_no_r,  // A priority queue of variables ordered with respect to the variable activity.
-                        order_heap_glue_r;
+    Heap<VarOrderLt>    order_heap_CHB,   // A priority queue of variables ordered with respect to the variable activity.
+                        order_heap_VSIDS;
     double              progress_estimate;// Set by 'search()'.
     bool                remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
 
     int                 core_lbd_cut;
     float               global_lbd_sum;
-    MyQueue<int>        lbd_queue;        // For computing moving averages of recent LBD values.
+    MyQueue<int>        lbd_queue;  // For computing moving averages of recent LBD values.
 
     uint64_t            next_T2_reduce,
                         next_L_reduce;
@@ -291,14 +299,14 @@ protected:
     void     reduceDB         ();                                                      // Reduce the set of learnt clauses.
     void     reduceDB_Tier2   ();
     void     removeSatisfied  (vec<CRef>& cs);                                         // Shrink 'cs' to contain only non-satisfied clauses.
-    void     safeRemoveSatisfiedCompact(vec<CRef>& cs, unsigned valid_mark);
+    void     safeRemoveSatisfied(vec<CRef>& cs, unsigned valid_mark);
     void     rebuildOrderHeap ();
     bool     binResMinimize   (vec<Lit>& out_learnt);                                  // Further learnt clause minimization by binary resolution.
 
     // Maintaining Variable/Clause activity:
     //
     void     varDecayActivity ();                      // Decay all variables with the specified factor. Implemented by increasing the 'bump' value instead.
-    void     varBumpActivity  (Var v);                 // Increase a variable with the current 'bump' value.
+    void     varBumpActivity  (Var v, double mult);    // Increase a variable with the current 'bump' value.
     void     claDecayActivity ();                      // Decay all clauses with the specified factor. Implemented by increasing the 'bump' value instead.
     void     claBumpActivity  (Clause& c);             // Increase a clause with the current 'bump' value.
 
@@ -307,7 +315,6 @@ protected:
     void     attachClause     (CRef cr);               // Attach a clause to watcher lists.
     void     detachClause     (CRef cr, bool strict = false); // Detach a clause to watcher lists.
     void     removeClause     (CRef cr);               // Detach and free a clause.
-    void     removeClauseHack (CRef cr, Lit watched0, Lit watched1);
     bool     locked           (const Clause& c) const; // Returns TRUE if a clause is a reason for some implication in the current state.
     bool     satisfied        (const Clause& c) const; // Returns TRUE if a clause is satisfied in the current state.
 
@@ -385,30 +392,6 @@ protected:
     // Returns a random integer 0 <= x < size. Seed must never be 0.
     static inline int irand(double& seed, int size) {
         return (int)(drand(seed) * size); }
-
-    // For (advanced) stamping.
-    struct Frame {
-        enum TYPE { START = 0, ENTER = 1, RETURN = 2, CLOSE = 3 };
-        Lit curr, next;
-        unsigned type : 3;
-        unsigned learnt : 1;
-        Frame(TYPE t, Lit p, Lit q, unsigned l) : curr(p), next(q), type(t), learnt(l) {}
-    };
-
-    vec<int32_t>        discovered;
-    vec<int32_t>        finished;
-    vec<int32_t>        observed;
-    vec<char>           flag;
-    vec<Lit>            root;
-    vec<Lit>            parent;
-
-    vec<Frame>          rec_stack;
-    vec<Lit>            scc; // Strongly connected component.
-
-    bool stampAll(bool use_bin_learnts);
-    int stamp(Lit p, int stamp_time, bool use_bin_learnts);
-    inline bool implExistsByBin(Lit p, bool use_bin_learnts) const;
-    inline bool isRoot(Lit p, bool use_bin_learnts) const;
 };
 
 
@@ -419,28 +402,21 @@ inline CRef Solver::reason(Var x) const { return vardata[x].reason; }
 inline int  Solver::level (Var x) const { return vardata[x].level; }
 
 inline void Solver::insertVarOrder(Var x) {
-    Heap<VarOrderLt>& order_heap = glucose_restart ? order_heap_glue_r : order_heap_no_r;
+    Heap<VarOrderLt>& order_heap = VSIDS ? order_heap_VSIDS : order_heap_CHB;
     if (!order_heap.inHeap(x) && decision[x]) order_heap.insert(x); }
 
 inline void Solver::varDecayActivity() {
-    var_inc_glue_r *= (1 / var_decay_glue_r);
-    var_inc_no_r   *= (1 / var_decay_no_r); }
+    var_inc *= (1 / var_decay); }
 
-inline void Solver::varBumpActivity(Var v) {
-    if ( (activity_no_r[v] += var_inc_no_r) > 1e100 ) {
+inline void Solver::varBumpActivity(Var v, double mult) {
+    if ( (activity_VSIDS[v] += var_inc * mult) > 1e100 ) {
         // Rescale:
         for (int i = 0; i < nVars(); i++)
-            activity_no_r[i] *= 1e-100;
-        var_inc_no_r *= 1e-100; }
-    if ( (activity_glue_r[v] += var_inc_glue_r) > 1e100 ) {
-        // Rescale:
-        for (int i = 0; i < nVars(); i++)
-            activity_glue_r[i] *= 1e-100;
-        var_inc_glue_r *= 1e-100; }
+            activity_VSIDS[i] *= 1e-100;
+        var_inc *= 1e-100; }
 
     // Update order_heap with respect to new activity:
-    if (order_heap_no_r  .inHeap(v)) order_heap_no_r  .decrease(v);
-    if (order_heap_glue_r.inHeap(v)) order_heap_glue_r.decrease(v); }
+    if (order_heap_VSIDS.inHeap(v)) order_heap_VSIDS.decrease(v); }
 
 inline void Solver::claDecayActivity() { cla_inc *= (1 / clause_decay); }
 inline void Solver::claBumpActivity (Clause& c) {
@@ -486,9 +462,9 @@ inline void     Solver::setDecisionVar(Var v, bool b)
     else if (!b &&  decision[v]) dec_vars--;
 
     decision[v] = b;
-    if (b && !order_heap_no_r.inHeap(v)){
-        order_heap_no_r.insert(v);
-        order_heap_glue_r.insert(v); }
+    if (b && !order_heap_CHB.inHeap(v)){
+        order_heap_CHB.insert(v);
+        order_heap_VSIDS.insert(v); }
 }
 inline void     Solver::setConfBudget(int64_t x){ conflict_budget    = conflicts    + x; }
 inline void     Solver::setPropBudget(int64_t x){ propagation_budget = propagations + x; }
