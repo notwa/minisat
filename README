@@ -1,19 +1,6 @@
-Directory overview:
-==================
+For compiling : 
+   ./build.sh
 
-mtl/            Mini Template Library
-core/           A core version of the solver
-simp/           An extended solver with simplification capabilities
-README
-LICENSE
 
-To build (release version: without assertions, statically linked, etc):
-======================================================================
-
-cd { core | simp }
-gmake rs
-
-Usage:
-======
-
-TODO
+For running 
+glucose.sh BENCHNAME
