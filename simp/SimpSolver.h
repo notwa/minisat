@@ -55,8 +55,6 @@ class SimpSolver : public Solver {
     // Mode of operation:
     //
     int     grow;             // Allow a variable elimination step to grow by a number of clauses (default to zero).
-    int     clause_lim;       // Variables are not eliminated if it produces a resolvent with a length above this limit.
-                              // -1 means no limit.
     bool    asymm_mode;       // Shrink clauses by asymmetric branching.
     bool    redundancy_check; // Check if a clause is already implied. Prett costly, and subsumes subsumptions :)
 
@@ -114,7 +112,7 @@ class SimpSolver : public Solver {
     vec<Clause*>& getOccurs                (Var x);
     void          gatherTouchedClauses     ();
     bool          merge                    (const Clause& _ps, const Clause& _qs, Var v, vec<Lit>& out_clause);
-    bool          merge                    (const Clause& _ps, const Clause& _qs, Var v, int& size);
+    bool          merge                    (const Clause& _ps, const Clause& _qs, Var v);
     bool          backwardSubsumptionCheck (bool verbose = false);
     bool          eliminateVar             (Var v, bool fail = false);
     void          remember                 (Var v);
@@ -133,7 +131,6 @@ class SimpSolver : public Solver {
 
 //=================================================================================================
 // Implementation of inline methods:
-
 
 inline void SimpSolver::updateElimHeap(Var v) {
     if (elimtable[v].order == 0)

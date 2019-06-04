@@ -162,8 +162,7 @@ public:
 |________________________________________________________________________________________________@*/
 inline Lit Clause::subsumes(const Clause& other) const
 {
-    //if (other.size() < size() || (extra.abst & ~other.extra.abst) != 0)
-    if (other.size() < size() || (!learnt() && !other.learnt() && (extra.abst & ~other.extra.abst) != 0))
+    if (other.size() < size() || (extra.abst & ~other.extra.abst) != 0)
         return lit_Error;
 
     Lit        ret = lit_Undef;

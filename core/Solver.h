@@ -87,14 +87,12 @@ public:
     int       polarity_mode;      // Controls which polarity the decision heuristic chooses. See enum below for allowed modes. (default polarity_false)
     int       verbosity;          // Verbosity level. 0=silent, 1=some progress report                                         (default 0)
 
-    enum { polarity_true = 0, polarity_false = 1, polarity_user = 2, polarity_rnd = 3, polarity_jwh = 4 };
+    enum { polarity_true = 0, polarity_false = 1, polarity_user = 2, polarity_rnd = 3 };
 
     // Statistics: (read-only member variable)
     //
     uint64_t starts, decisions, rnd_decisions, propagations, conflicts;
     uint64_t clauses_literals, learnts_literals, max_literals, tot_literals;
-
-    uint32_t skipped;
 
 protected:
 
@@ -124,7 +122,6 @@ protected:
     vec<vec<Clause*> >  watches;          // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
     vec<char>           assigns;          // The current assignments (lbool:s stored as char:s).
     vec<char>           polarity;         // The preferred polarity of each variable.
-    vec<float>          var_jwh;
     vec<char>           decision_var;     // Declares if a variable is eligible for selection in the decision heuristic.
     vec<Lit>            trail;            // Assignment stack; stores all assigments made in the order they were made.
     vec<int>            trail_lim;        // Separator indices for different decision levels in 'trail'.
@@ -162,9 +159,6 @@ protected:
     lbool    search           (int nof_conflicts, int nof_learnts);                    // Search for a given number of conflicts.
     void     reduceDB         ();                                                      // Reduce the set of learnt clauses.
     void     removeSatisfied  (vec<Clause*>& cs);                                      // Shrink 'cs' to contain only non-satisfied clauses.
-
-
-    bool     skipLit          (Lit l, const Clause& c, const vec<char>& seen);
 
     // Maintaining Variable/Clause activity:
     //
@@ -258,13 +252,15 @@ inline bool     Solver::okay          ()      const   { return ok; }
 
 
 //=================================================================================================
-// Debug etc:
+// Debug + etc:
 
 
 #define reportf(format, args...) ( fflush(stdout), fprintf(stderr, format, ## args), fflush(stderr) )
 
-static inline void logLit(FILE* f, Lit l) {
-    fprintf(f, "%sx%d", sign(l) ? "~" : "", var(l)+1); }
+static inline void logLit(FILE* f, Lit l)
+{
+    fprintf(f, "%sx%d", sign(l) ? "~" : "", var(l)+1);
+}
 
 static inline void logLits(FILE* f, const vec<Lit>& ls)
 {
@@ -279,16 +275,17 @@ static inline void logLits(FILE* f, const vec<Lit>& ls)
     fprintf(f, "] ");
 }
 
-static inline const char* showBool(bool b) {
-    return b ? "true" : "false"; }
+static inline const char* showBool(bool b) { return b ? "true" : "false"; }
+
 
 // Just like 'assert()' but expression will be evaluated in the release version as well.
-static inline void check(bool expr) {
-    assert(expr); }
+static inline void check(bool expr) { assert(expr); }
 
 
-inline void Solver::printLit(Lit l) {
-    reportf("%s%d:%c", sign(l) ? "-" : "", var(l)+1, value(l) == l_True ? '1' : (value(l) == l_False ? '0' : 'X')); }
+inline void Solver::printLit(Lit l)
+{
+    reportf("%s%d:%c", sign(l) ? "-" : "", var(l)+1, value(l) == l_True ? '1' : (value(l) == l_False ? '0' : 'X'));
+}
 
 
 template<class C>

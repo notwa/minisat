@@ -155,21 +155,15 @@ static bool match(B& in, char* str) {
 template<class B>
 static void parse_DIMACS_main(B& in, SimpSolver& S) {
     vec<Lit> lits;
-    int vars    = 0;
-    int clauses = 0;
-    int cnt     = 0;
     for (;;){
-        if (S.verbosity == 2 && S.redundancy_check && S.nClauses() % 100 == 0)
-            printf("Redundancy check: %10d/%10d (%10d)\r", S.nClauses(), clauses, cnt - S.nClauses());
-
         skipWhitespace(in);
         if (*in == EOF) break;
         else if (*in == 'p'){
             if (match(in, "p cnf")){
-                vars    = parseInt(in);
-                clauses = parseInt(in);
-                reportf("|  Number of variables:  %12d                                         |\n", vars);
-                reportf("|  Number of clauses:    %12d                                         |\n", clauses);
+                int vars    = parseInt(in);
+                int clauses = parseInt(in);
+                reportf("|  Number of variables:  %-12d                                         |\n", vars);
+                reportf("|  Number of clauses:    %-12d                                         |\n", clauses);
 
                 // SATRACE'06 hack
                 if (clauses > 4000000)
@@ -180,7 +174,6 @@ static void parse_DIMACS_main(B& in, SimpSolver& S) {
         } else if (*in == 'c' || *in == 'p')
             skipLine(in);
         else{
-            cnt++;
             readClause(in, S, lits);
             S.addClause(lits); }
     }
@@ -205,7 +198,6 @@ void printStats(Solver& S)
     reportf("decisions             : %-12lld   (%4.2f %% random) (%.0f /sec)\n", S.decisions, (float)S.rnd_decisions*100 / (float)S.decisions, S.decisions   /cpu_time);
     reportf("propagations          : %-12lld   (%.0f /sec)\n", S.propagations, S.propagations/cpu_time);
     reportf("conflict literals     : %-12lld   (%4.2f %% deleted)\n", S.tot_literals, (S.max_literals - S.tot_literals)*100 / (double)S.max_literals);
-    reportf("skipped lits          : %-12d\n", S.skipped);
     if (mem_used != 0) reportf("Memory used           : %.2f MB\n", mem_used / 1048576.0);
     reportf("CPU time              : %g s\n", cpu_time);
 }
@@ -229,8 +221,7 @@ void printUsage(char** argv)
     reportf("  -asymm\n");
     reportf("  -rcheck\n");
     reportf("  -grow          = <num> [ >0 ]\n");
-    reportf("  -lim           = <num> [ >2 ]\n");
-    reportf("  -polarity-mode = {true,false,rnd,jwh}\n");
+    reportf("  -polarity-mode = {true,false,rnd}\n");
     reportf("  -decay         = <num> [ 0 - 1 ]\n");
     reportf("  -rnd-freq      = <num> [ 0 - 1 ]\n");
     reportf("  -dimacs        = <output-file>\n");
@@ -276,8 +267,6 @@ int main(int argc, char** argv)
                 S.polarity_mode = Solver::polarity_false;
             else if (strcmp(value, "rnd") == 0)
                 S.polarity_mode = Solver::polarity_rnd;
-            else if (strcmp(value, "jwh") == 0)
-                S.polarity_mode = Solver::polarity_jwh;
             else{
                 reportf("ERROR! unknown polarity-mode %s\n", value);
                 exit(0); }
@@ -321,16 +310,10 @@ int main(int argc, char** argv)
             S.redundancy_check = true;
         }else if ((value = hasPrefix(argv[i], "-grow="))){
             int grow = (int)strtol(value, NULL, 10);
-            if (grow < 1){
+            if (grow == 0 && errno == EINVAL){
                 reportf("ERROR! illegal grow constant %s\n", &argv[i][6]);
                 exit(0); }
             S.grow = grow;
-        }else if ((value = hasPrefix(argv[i], "-lim="))){
-            int lim = (int)strtol(value, NULL, 10);
-            if (lim < 3){
-                reportf("ERROR! illegal clause limit constant %s\n", &argv[i][5]);
-                exit(0); }
-            S.clause_lim = lim;
         }else if ((value = hasPrefix(argv[i], "-dimacs="))){
             dimacs = value;
         }else if ((value = hasPrefix(argv[i], "-freeze="))){
@@ -346,7 +329,7 @@ int main(int argc, char** argv)
     }
     argc = j;
 
-    double initial_time = cpuTime();
+    double cpu_time = cpuTime();
 
     if (pre == pre_none)
         S.eliminate(true);
@@ -370,8 +353,8 @@ int main(int argc, char** argv)
     FILE* res = (argc >= 3) ? fopen(argv[2], "wb") : NULL;
 
 
-    double parsed_time = cpuTime();
-    reportf("|  Parse time:           %12.2f s                                       |\n", parsed_time - initial_time);
+    double parse_time = cpuTime() - cpu_time;
+    reportf("|  Parsing time:         %-12.2f s                                       |\n", parse_time);
 
     /*HACK: Freeze variables*/
     if (freeze != NULL && pre != pre_none){
@@ -389,32 +372,26 @@ int main(int argc, char** argv)
             count++;
         }
         fclose(in);
-        reportf("|  Frozen vars :         %12.0f                                         |\n", (double)count);
+        reportf("|  Frozen vars :         %-12.0f                                         |\n", (double)count);
     }
     /*END*/
 
-    S.eliminate(true);
-    double simplified_time = cpuTime();
-    reportf("|  Simplification time:  %12.2f s                                       |\n", simplified_time - parsed_time);
-    reportf("|                                                                             |\n");
-
-    if (!S.okay()){
+    if (!S.simplify()){
+        reportf("Solved by unit propagation\n");
         if (res != NULL) fprintf(res, "UNSAT\n"), fclose(res);
-        reportf("===============================================================================\n");
-        reportf("Solved by simplification\n");
-        printStats(S);
-        reportf("\n");
         printf("UNSATISFIABLE\n");
         exit(20);
     }
 
     if (dimacs){
+        if (pre != pre_none)
+            S.eliminate(true);
         reportf("==============================[ Writing DIMACS ]===============================\n");
         S.toDimacs(dimacs);
         printStats(S);
         exit(0);
     }else{
-        bool ret = S.solve();
+        bool ret = S.solve(true, true);
         printStats(S);
         reportf("\n");
 

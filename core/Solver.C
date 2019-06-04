@@ -43,8 +43,6 @@ Solver::Solver() :
   , starts(0), decisions(0), rnd_decisions(0), propagations(0), conflicts(0)
   , clauses_literals(0), learnts_literals(0), max_literals(0), tot_literals(0)
 
-    , skipped(0)
-
   , ok               (true)
   , cla_inc          (1)
   , var_inc          (1)
@@ -84,7 +82,6 @@ Var Solver::newVar(bool sign, bool dvar)
     seen      .push(0);
 
     polarity    .push((char)sign);
-    var_jwh     .push(0);
     decision_var.push((char)dvar);
 
     insertVarOrder(v);
@@ -120,9 +117,6 @@ bool Solver::addClause(vec<Lit>& ps)
         Clause* c = Clause_new(ps, false);
         clauses.push(c);
         attachClause(*c);
-
-        for (int i = 0; i < ps.size(); i++)
-            var_jwh[var(ps[i])] += (sign(ps[i]) ? -1 : 1) * powf(1, -ps.size());
     }
 
     return true;
@@ -148,10 +142,6 @@ void Solver::detachClause(Clause& c) {
 
 
 void Solver::removeClause(Clause& c) {
-    if (!c.learnt())
-        for (int i = 0; i < c.size(); i++)
-            var_jwh[var(c[i])] -= (sign(c[i]) ? -1 : 1) * powf(1, -c.size());
-
     detachClause(c);
     free(&c); }
 
@@ -205,25 +195,11 @@ Lit Solver::pickBranchLit(int polarity_mode, double random_var_freq)
     case polarity_false: sign = true;  break;
     case polarity_user:  sign = polarity[next]; break;
     case polarity_rnd:   sign = irand(random_seed, 2); break;
-    case polarity_jwh:   sign = var_jwh[next] <= 0; break;
-        //case polarity_jwh:   sign = var_jwh[next] > 0; break;
     default: assert(false); }
 
     return next == var_Undef ? lit_Undef : Lit(next, sign);
 }
 
-
-inline bool Solver::skipLit(Lit l, const Clause& c, const vec<char>& seen)
-{
-    assert(value(l) == l_True);
-    for (int i = 0; i < c.size(); i++)
-        if (c[i] != l){
-            if (value(c[i]) != l_False || !seen[var(c[i])])
-                return false;
-        }
-
-    return true;
-}
 
 /*_________________________________________________________________________________________________
 |
@@ -251,8 +227,7 @@ void Solver::analyze(Clause* confl, vec<Lit>& out_learnt, int& out_btlevel)
     //
     out_learnt.push();      // (leave room for the asserting literal)
     int index   = trail.size() - 1;
-
-    //vec<Lit> active;
+    out_btlevel = 0;
 
     do{
         assert(confl != NULL);          // (otherwise should be UIP)
@@ -268,20 +243,15 @@ void Solver::analyze(Clause* confl, vec<Lit>& out_learnt, int& out_btlevel)
                 varBumpActivity(var(q));
                 seen[var(q)] = 1;
                 if (level[var(q)] >= decisionLevel())
-                    {
-                        //active.push(q);
                     pathC++;
-                }
-                else
+                else{
                     out_learnt.push(q);
+                    if (level[var(q)] > out_btlevel)
+                        out_btlevel = level[var(q)];
+                }
             }
         }
-        
-        //fprintf(stderr, "last clause:       "); printClause(c); fprintf(stderr, "\n");
-        //fprintf(stderr, "active literals:   "); printClause(active); fprintf(stderr, "\n");
-        //fprintf(stderr, "inactive literals: "); printClause(out_learnt); fprintf(stderr, "\n");
 
-    skip:
         // Select next clause to look at:
         while (!seen[var(trail[index--])]);
         p     = trail[index+1];
@@ -289,55 +259,29 @@ void Solver::analyze(Clause* confl, vec<Lit>& out_learnt, int& out_btlevel)
         seen[var(p)] = 0;
         pathC--;
 
-        //remove(active, ~p);
-#if 0
-        if (pathC > 0){
-            // Skip literals:
-            for (int i = 0; i < watches[toInt(~p)].size(); i++){
-                Clause& c = *watches[toInt(~p)][i];
-                if (skipLit(p, c, seen)){
-                    if (&c != reason[var(p)])
-                        skipped++;
-                    //fprintf(stderr, "removing literal:  "); printLit(p); fprintf(stderr, "\n");
-                    //fprintf(stderr, "using clause:      "); printClause(c); fprintf(stderr, "\n");
-                    goto skip;
-                }
-            }
-        }
-#endif
-
     }while (pathC > 0);
     out_learnt[0] = ~p;
-
-    //fprintf(stderr, "derived clause: "); printClause(out_learnt); fprintf(stderr, "\n");
 
     // Simplify conflict clause:
     //
     int i, j;
-    out_learnt.copyTo(analyze_toclear);
     if (expensive_ccmin){
         uint32_t abstract_level = 0;
         for (i = 1; i < out_learnt.size(); i++)
             abstract_level |= abstractLevel(var(out_learnt[i])); // (maintain an abstraction of levels involved in conflict)
 
+        out_learnt.copyTo(analyze_toclear);
         for (i = j = 1; i < out_learnt.size(); i++)
             if (reason[var(out_learnt[i])] == NULL || !litRedundant(out_learnt[i], abstract_level))
                 out_learnt[j++] = out_learnt[i];
     }else{
+        out_learnt.copyTo(analyze_toclear);
         for (i = j = 1; i < out_learnt.size(); i++){
             Clause& c = *reason[var(out_learnt[i])];
-
-            if (&c == NULL)
-                goto keep;
-
             for (int k = 1; k < c.size(); k++)
-                if (!seen[var(c[k])] && level[var(c[k])] > 0)
-                    goto keep;
-
-            continue;
-
-        keep:
-            out_learnt[j++] = out_learnt[i];
+                if (!seen[var(c[k])] && level[var(c[k])] > 0){
+                    out_learnt[j++] = out_learnt[i];
+                    break; }
         }
     }
     max_literals += out_learnt.size();

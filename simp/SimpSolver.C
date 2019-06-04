@@ -27,7 +27,6 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 SimpSolver::SimpSolver() :
     grow               (0)
-  , clause_lim         (-1)
   , asymm_mode         (false)
   , redundancy_check   (false)
   , merges             (0)
@@ -97,8 +96,6 @@ bool SimpSolver::solve(const vec<Lit>& assumps, bool do_simp, bool turn_off_simp
 
     if (result)
         result = Solver::solve(assumps);
-    else if (verbosity >= 1)
-        reportf("===============================================================================\n");
 
     if (result) {
         extendModel();
@@ -221,8 +218,8 @@ bool SimpSolver::merge(const Clause& _ps, const Clause& _qs, Var v, vec<Lit>& ou
     out_clause.clear();
 
     bool  ps_smallest = _ps.size() < _qs.size();
-    const Clause& ps  =  ps_smallest ? _qs : _ps;
-    const Clause& qs  =  ps_smallest ? _ps : _qs;
+    const Clause& ps =  ps_smallest ? _qs : _ps;
+    const Clause& qs =  ps_smallest ? _ps : _qs;
 
     for (int i = 0; i < qs.size(); i++){
         if (var(qs[i]) != v){
@@ -246,17 +243,15 @@ bool SimpSolver::merge(const Clause& _ps, const Clause& _qs, Var v, vec<Lit>& ou
 
 
 // Returns FALSE if clause is always satisfied.
-bool SimpSolver::merge(const Clause& _ps, const Clause& _qs, Var v, int& size)
+bool SimpSolver::merge(const Clause& _ps, const Clause& _qs, Var v)
 {
     merges++;
 
     bool  ps_smallest = _ps.size() < _qs.size();
-    const Clause& ps  =  ps_smallest ? _qs : _ps;
-    const Clause& qs  =  ps_smallest ? _ps : _qs;
-    const Lit*  __ps  = (const Lit*)ps;
-    const Lit*  __qs  = (const Lit*)qs;
-
-    size = ps.size()-1;
+    const Clause& ps =  ps_smallest ? _qs : _ps;
+    const Clause& qs =  ps_smallest ? _ps : _qs;
+    const Lit* __ps = (const Lit*)ps;
+    const Lit* __qs = (const Lit*)qs;
 
     for (int i = 0; i < qs.size(); i++){
         if (var(__qs[i]) != v){
@@ -266,7 +261,6 @@ bool SimpSolver::merge(const Clause& _ps, const Clause& _qs, Var v, int& size)
                         return false;
                     else
                         goto next;
-            size++;
         }
         next:;
     }
@@ -465,27 +459,10 @@ bool SimpSolver::eliminateVar(Var v, bool fail)
         (find(*cls[i], Lit(v)) ? pos : neg).push(cls[i]);
 
     // Check if number of clauses decreases:
-    int      cnt  = 0;
-
-    //int      lits = 0;
-    //int      prev_lits = 0;
-    //for (int i = 0; i < cls.size(); i++)
-    //    prev_lits += cls[i]->size();
-    
-    int clause_size = 0;
-
+    int cnt = 0;
     for (int i = 0; i < pos.size(); i++)
         for (int j = 0; j < neg.size(); j++)
-            //if (merge(*pos[i], *neg[j], v) && ++cnt > cls.size() + grow)
-            //if (merge(*pos[i], *neg[j], v, resolvent) && 
-            //   (++cnt > cls.size() + grow || (lits += resolvent.size(), lits > prev_lits + 8)))
-            //if (merge(*pos[i], *neg[j], v, resolvent) && 
-            //    (lits += resolvent.size(), (++cnt > cls.size() + grow && lits > prev_lits)))
-            //if (merge(*pos[i], *neg[j], v, resolvent) && ++cnt > cls.size() + grow)
-            //if (merge(*pos[i], *neg[j], v, resolvent) && 
-            //    (++cnt > cls.size() + grow || resolvent.size() > 20))
-            if (merge(*pos[i], *neg[j], v, clause_size) && 
-                (++cnt > cls.size() + grow || (clause_lim != -1 && clause_size > clause_lim)))
+            if (merge(*pos[i], *neg[j], v) && ++cnt > cls.size() + grow)
                 return true;
 
     // Delete and store old clauses:
@@ -497,8 +474,8 @@ bool SimpSolver::eliminateVar(Var v, bool fail)
         removeClause(*cls[i]); }
 
     // Produce clauses in cross product:
+    int top = clauses.size();
     vec<Lit> resolvent;
-    int      top = clauses.size();
     for (int i = 0; i < pos.size(); i++)
         for (int j = 0; j < neg.size(); j++)
             if (merge(*pos[i], *neg[j], v, resolvent) && !addClause(resolvent))
@@ -590,10 +567,8 @@ void SimpSolver::extendModel()
 
 bool SimpSolver::eliminate(bool turn_off_elim)
 {
-    if (!simplify())
-        return false;
-    else if (!use_simplification)
-        return true;
+    if (!ok || !use_simplification)
+        return ok;
 
     // Main simplification loop:
     //assert(subsumption_queue.size() == 0);
@@ -602,7 +577,7 @@ bool SimpSolver::eliminate(bool turn_off_elim)
 
         //fprintf(stderr, "subsumption phase: (%d)\n", subsumption_queue.size());
         if (!backwardSubsumptionCheck(true))
-            return ok = false;
+            return false;
 
         //fprintf(stderr, "elimination phase:\n (%d)", elim_heap.size());
         for (int cnt = 0; !elim_heap.empty(); cnt++){
@@ -612,7 +587,7 @@ bool SimpSolver::eliminate(bool turn_off_elim)
                 reportf("elimination left: %10d\r", elim_heap.size());
 
             if (!frozen[elim] && !eliminateVar(elim))
-                return ok = false;
+                return false;
         }
 
         assert(subsumption_queue.size() == 0);
@@ -711,7 +686,7 @@ void SimpSolver::toDimacs(const char* file)
         // to deallocate them at this point. Could be improved.
         int cnt = 0;
         for (int i = 0; i < clauses.size(); i++)
-            if (satisfied(*clauses[i]))
+            if (!satisfied(*clauses[i]))
                 cnt++;
 
         fprintf(f, "p cnf %d %d\n", nVars(), cnt);

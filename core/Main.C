@@ -162,8 +162,8 @@ static void parse_DIMACS_main(B& in, Solver& S) {
             if (match(in, "p cnf")){
                 int vars    = parseInt(in);
                 int clauses = parseInt(in);
-                reportf("|  Number of variables:  %12d                                         |\n", vars);
-                reportf("|  Number of clauses:    %12d                                         |\n", clauses);
+                reportf("|  Number of variables:  %-12d                                         |\n", vars);
+                reportf("|  Number of clauses:    %-12d                                         |\n", clauses);
             }else{
                 reportf("PARSE ERROR! Unexpected char: %c\n", *in), exit(3);
             }
@@ -213,7 +213,7 @@ void printUsage(char** argv)
 {
     reportf("USAGE: %s [options] <input-file> <result-output-file>\n\n  where input may be either in plain or gzipped DIMACS.\n\n", argv[0]);
     reportf("OPTIONS:\n\n");
-    reportf("  -polarity-mode = {true,false,rnd, jwh}\n");
+    reportf("  -polarity-mode = {true,false,rnd}\n");
     reportf("  -decay         = <num> [ 0 - 1 ]\n");
     reportf("  -rnd-freq      = <num> [ 0 - 1 ]\n");
     reportf("  -verbosity     = {0,1,2}\n");
@@ -247,8 +247,6 @@ int main(int argc, char** argv)
                 S.polarity_mode = Solver::polarity_false;
             else if (strcmp(value, "rnd") == 0)
                 S.polarity_mode = Solver::polarity_rnd;
-            else if (strcmp(value, "jwh") == 0)
-                S.polarity_mode = Solver::polarity_jwh;
             else{
                 reportf("ERROR! unknown polarity-mode %s\n", value);
                 exit(0); }
@@ -294,7 +292,7 @@ int main(int argc, char** argv)
     _FPU_GETCW(oldcw); newcw = (oldcw & ~_FPU_EXTENDED) | _FPU_DOUBLE; _FPU_SETCW(newcw);
     reportf("WARNING: for repeatability, setting FPU to use double precision\n");
 #endif
-    double initial_time = cpuTime();
+    double cpu_time = cpuTime();
 
     solver = &S;
     signal(SIGINT,SIGINT_handler);
@@ -314,16 +312,12 @@ int main(int argc, char** argv)
     gzclose(in);
     FILE* res = (argc >= 3) ? fopen(argv[2], "wb") : NULL;
 
-    double parsed_time = cpuTime();
-    reportf("|  Parse time:           %12.2f s                                       |\n", parsed_time - initial_time);
-    reportf("|                                                                             |\n");
+    double parse_time = cpuTime() - cpu_time;
+    reportf("|  Parsing time:         %-12.2f s                                       |\n", parse_time);
 
     if (!S.simplify()){
-        if (res != NULL) fprintf(res, "UNSAT\n"), fclose(res);
-        reportf("===============================================================================\n");
         reportf("Solved by unit propagation\n");
-        printStats(S);
-        reportf("\n");
+        if (res != NULL) fprintf(res, "UNSAT\n"), fclose(res);
         printf("UNSATISFIABLE\n");
         exit(20);
     }
