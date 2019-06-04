@@ -5,6 +5,7 @@ written by various authors over the years.
 [The original MiniSat][homepage] is written and
 Copyright © 2003-2006 Niklas Eén, Copyright © 2003-2010 Niklas Sörensson,
 and distributed under the terms of [the MIT license.][license_mit]
+You may be wondering, [what is this?](#what-is-this)
 
 In the [master branch,][master] a version based on [Niklas's most recent work][upstream]
 is patched and ready to compile with modern compilers.
@@ -42,14 +43,16 @@ Select "Download Zip" if you're not familiar with git.
 These versions have been omitted from this repository
 because they are already readily accessible.
 
+[cms]: https://github.com/msoos/cryptominisat
+[glucose]: https://www.labri.fr/perso/lsimon/glucose/
+[maple]: https://sites.google.com/a/gsd.uwaterloo.ca/maplesat/
+
 ### CryptoMiniSat
 
 [CryptoMiniSat][cms] is a major rewrite of MiniSat, adding many features,
 including XOR clauses for improved solving of cryptographic problems.
 CryptoMiniSat is written and maintained by [Mate Soos](https://www.msoos.org/)
 on [the CryptoMiniSat GitHub repository.][cms]
-
-[cms]: https://github.com/msoos/cryptominisat
 
 ### More
 
@@ -79,3 +82,47 @@ but for the time being, there are:
 [comp2018]: http://sat2018.forsyte.tuwien.ac.at/
 [race2019]: http://sat-race-2019.ciirc.cvut.cz/
 [satcomp]: http://satcompetition.org/
+
+## What is this?
+
+MiniSat is a [SAT solver][SAT] that has been applied to complete
+many tasks over the years. SAT is an abbreviation for *satisfiability.*
+SAT solvers solve [boolean satisfiability problems,][BSP]
+with the possible outcomes of *satisfiable,* *unsatisfiable,*
+or *unknown/indeterminate,* often alongside a solution or proof.
+SAT problems are [NP-complete.][NP]
+
+SAT solvers also serve as a base for most SMT solvers.
+SAT solvers are restricted to problems given in [conjunctive normal form,][CNF]
+whereas SMT solvers work with problems described more abstractly.
+SMT is an acronym for [Satisfiability Modulo Theories.][SMT]
+An example of an SMT solver is the [Simple Theorem Prover (STP),][STP]
+which employs a version of MiniSat.
+
+A very informal overview of using SAT and SMT solvers
+is given by Dennis Yurichev's [SAT/SMT by Example.][example]
+Further information (and slightly dated resources)
+is available in [SATLIB — The Satisfiability Library.][satlib]
+
+In particular, MiniSat is a popular basis for experimenting with
+new ideas to solve problems more efficiently,
+due to the software's code being relatively short and simple.
+
+MiniSat's many variations have ranked on or won [many competitions,][satcomp]
+under many names such as [COMSPS,][comsps_archive] [Glucose,][glucose]
+[Maple,][maple] and more.
+
+There are solvers that are not based on MiniSat.
+For example, [PicoSAT][picosat] and [yices,][yices]
+the latter being an SMT solver.
+
+[SAT]: https://en.wikipedia.org/wiki/Boolean_satisfiability_problem#Algorithms_for_solving_SAT
+[BSP]: https://en.wikipedia.org/wiki/Boolean_satisfiability_problem
+[NP]: https://en.wikipedia.org/wiki/NP-complete
+[SMT]: https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
+[STP]: https://github.com/stp/stp/
+[CNF]: https://en.wikipedia.org/wiki/Conjunctive_normal_form
+[example]: https://yurichev.com/writings/SAT_SMT_by_example.pdf
+[satlib]: https://www.cs.ubc.ca/~hoos/SATLIB/
+[picosat]: http://fmv.jku.at/picosat/
+[yices]: http://yices.csl.sri.com/
