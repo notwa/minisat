@@ -20,8 +20,8 @@ Earlier than that, a few select versions
 are available on [the MiniSat homepage.][homepage]
 
 You can download any of the versions on GitHub by following the appropriate link
-and clicking on the green "Clone or download" link on the top right,
-just above the dates. Select "Download Zip" if you're not familiar with git.
+and clicking on the green "Clone or download" link on the top right.
+Select "Download Zip" if you're not familiar with git.
 
 [homepage]: http://minisat.se/MiniSat.html
 [master]: https://github.com/notwa/minisat/tree/master
