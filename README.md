@@ -24,6 +24,11 @@ to MiniSat 2.2.0. [Visit the COMiniSatPS homepage. (archived)][comsps_archive]
 In the [minisat-to-glucose branch,][ms2glu] Chanseok Oh's proof of concept
 patches have been applied to MiniSat 2.2.0.
 
+In the [MapleCOMSPS,][mcomsps] [MapleLCMDist,][mlcmd]
+and [MapleLCMDistChronoBT][mlcmdcbt] branches, the winners
+of the main tracks of SAT Competitions 2016, 2017, and 2018 respectively
+have been applied to COMiniSatPS.
+
 In the [glucose-1.0 branch,][glu10] `glucose_1.0.zip`
 via [the glucose homepage][glucose] has been applied to MiniSat 2.0.
 Similarily, in the remaining glucose branches,
@@ -49,6 +54,9 @@ Select "Download Zip" if you're not familiar with git.
 [comsps]: https://github.com/notwa/minisat/tree/COMiniSatPS
 [ms2glu]: https://github.com/notwa/minisat/tree/minisat-to-glucose
 [comsps_archive]: https://web.archive.org/web/20171023151341/http://www.cs.nyu.edu/~chanseok/cominisatps/
+[mcomsps]: https://github.com/notwa/minisat/tree/MapleCOMSPS
+[mlcmd]: https://github.com/notwa/minisat/tree/MapleLCMDist
+[mlcmdcbt]: https://github.com/notwa/minisat/tree/MapleLCMDistChronoBT
 [license_mit]: https://choosealicense.com/licenses/mit/
 [glucose]: https://www.labri.fr/perso/lsimon/glucose/
 [glu10]: https://github.com/notwa/minisat/tree/glucose-1.0
