@@ -32,7 +32,7 @@ have been applied to COMiniSatPS. Note that a patch is available to
 
 In the [glucose-1.0 branch,][glu10] the original glucose
 via [the glucose homepage][glucose] has been applied to MiniSat 2.0.
-Similarily, in the remaining glucose branches,
+Similarly, in the remaining glucose branches,
 the appropriate glucose versions have been applied to MiniSat 2.2.0:
 [glucose-2.0,][glu20]
 [glucose-2.1,][glu21]
