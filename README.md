@@ -14,22 +14,20 @@ is patched and ready to compile with modern compilers.
 
 In the [patches branch,][patches] various patch files have been archived.
 
-In the [COMiniSatPS branch,][comsps] Chanseok Oh's patches have been applied
-to version 2.2.0. [Visit the COMiniSatPS homepage. (archived)][comsps_archive]
-
-In the [minisat-to-glucose branch,][ms2glu] Chanseok Oh's other set of patches
-have been applied to version 2.2.0.
-
 The ubiquitous [version 2.2.0 is available here,][v220]
 and the earlier [version 2.0 is available here.][v200]
 Earlier than that, a few select versions
 are available on [the MiniSat homepage.][homepage]
 
-In the [glucose-1.0 branch,][glu10] `glucose_1.0.zip`
-via [the glucose homepage][glucose] has been applied to [MiniSat 2.0.][v200]
+In the [COMiniSatPS branch,][comsps] Chanseok Oh's patches have been applied
+to MiniSat 2.2.0. [Visit the COMiniSatPS homepage. (archived)][comsps_archive]
+In the [minisat-to-glucose branch,][ms2glu] Chanseok Oh's proof of concept
+patches have been applied to MiniSat 2.2.0.
 
+In the [glucose-1.0 branch,][glu10] `glucose_1.0.zip`
+via [the glucose homepage][glucose] has been applied to MiniSat 2.0.
 Similarily, in the remaining glucose branches,
-the appropriate glucose versions have been applied to [MiniSat 2.2.0:][v220]
+the appropriate glucose versions have been applied to MiniSat 2.2.0:
 [glucose-2.0][glu20] (`glucose-2-compet.tgz`),
 [glucose-2.1][glu21] (`glucose2.1.tgz`),
 [glucose-3.0][glu30] (`glucose-3.0.tgz`),
@@ -46,12 +44,12 @@ Select "Download Zip" if you're not familiar with git.
 [master]: https://github.com/notwa/minisat/tree/master
 [upstream]: https://github.com/niklasso/minisat/tree/master
 [patches]: https://github.com/notwa/minisat/tree/patches
-[comsps]: https://github.com/notwa/minisat/tree/COMiniSatPS
-[comsps_archive]: https://web.archive.org/web/20171023151341/http://www.cs.nyu.edu/~chanseok/cominisatps/
-[ms2glu]: https://github.com/notwa/minisat/tree/minisat-to-glucose
-[license_mit]: https://choosealicense.com/licenses/mit/
 [v220]: https://github.com/notwa/minisat/tree/releases/2.2.0
 [v200]: https://github.com/notwa/minisat/tree/releases/2.0.0
+[comsps]: https://github.com/notwa/minisat/tree/COMiniSatPS
+[ms2glu]: https://github.com/notwa/minisat/tree/minisat-to-glucose
+[comsps_archive]: https://web.archive.org/web/20171023151341/http://www.cs.nyu.edu/~chanseok/cominisatps/
+[license_mit]: https://choosealicense.com/licenses/mit/
 [glucose]: https://www.labri.fr/perso/lsimon/glucose/
 [glu10]: https://github.com/notwa/minisat/tree/glucose-1.0
 [glu20]: https://github.com/notwa/minisat/tree/glucose-2.0
