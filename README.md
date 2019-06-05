@@ -27,7 +27,8 @@ patches have been applied to MiniSat 2.2.0.
 In the [MapleCOMSPS,][mcomsps] [MapleLCMDist,][mlcmd]
 and [MapleLCMDistChronoBT][mlcmdcbt] branches, the winners
 of the main tracks of SAT Competitions 2016, 2017, and 2018 respectively
-have been applied to COMiniSatPS.
+have been applied to COMiniSatPS. Note that a patch is available to
+[fix a crash in MapleLCMDist's DRUP-outputting code.][mlcmd_patch]
 
 In the [glucose-1.0 branch,][glu10] `glucose_1.0.zip`
 via [the glucose homepage][glucose] has been applied to MiniSat 2.0.
@@ -57,6 +58,7 @@ Select "Download Zip" if you're not familiar with git.
 [mcomsps]: https://github.com/notwa/minisat/tree/MapleCOMSPS
 [mlcmd]: https://github.com/notwa/minisat/tree/MapleLCMDist
 [mlcmdcbt]: https://github.com/notwa/minisat/tree/MapleLCMDistChronoBT
+[mlcmd_patch]: https://github.com/notwa/minisat/blob/patches/maple-fix-drup-segfault.patch
 [license_mit]: https://choosealicense.com/licenses/mit/
 [glucose]: https://www.labri.fr/perso/lsimon/glucose/
 [glu10]: https://github.com/notwa/minisat/tree/glucose-1.0
