@@ -1,0 +1,13 @@
+diff --git a/core/Solver.cc b/core/Solver.cc
+index 09c988a..75ccd8a 100644
+--- a/core/Solver.cc
++++ b/core/Solver.cc
+@@ -740,7 +740,7 @@ bool Solver::simplifyLearnt_tier2()
+                 assert(c.size() > 0);
+                 afterSize = c.size();
+                 
+-                if(saved_size!=c.size()){
++                if(drup_file && saved_size!=c.size()){
+ 
+ #ifdef BIN_DRUP
+                     binDRUP('a', c , drup_file);
