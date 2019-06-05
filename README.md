@@ -30,15 +30,15 @@ of the main tracks of SAT Competitions 2016, 2017, and 2018 respectively
 have been applied to COMiniSatPS. Note that a patch is available to
 [fix a crash in MapleLCMDist's DRUP-outputting code.][mlcmd_patch]
 
-In the [glucose-1.0 branch,][glu10] `glucose_1.0.zip`
+In the [glucose-1.0 branch,][glu10] the original glucose
 via [the glucose homepage][glucose] has been applied to MiniSat 2.0.
 Similarily, in the remaining glucose branches,
 the appropriate glucose versions have been applied to MiniSat 2.2.0:
-[glucose-2.0][glu20] (`glucose-2-compet.tgz`),
-[glucose-2.1][glu21] (`glucose2.1.tgz`),
-[glucose-3.0][glu30] (`glucose-3.0.tgz`),
-[glucose-4.0][glu40] (`glucose-syrup.tgz`), and
-[glucose-4.1][glu41] (`glucose-syrup-4.1.tgz`).
+[glucose-2.0,][glu20]
+[glucose-2.1,][glu21]
+[glucose-3.0,][glu30]
+[glucose-4.0,][glu40] and
+[glucose-4.1.][glu41]
 Compared to the original releases, some unwanted files
 that had slipped in have been removed, and missing licenses have been restored.
 
