@@ -4,6 +4,11 @@ MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
 
 Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
 
+Maple_LCM, Based on MapleCOMSPS_DRUP --Copyright (c) 2017, Mao Luo, Chu-Min LI, Fan Xiao: implementing a learnt clause minimisation approach
+ Reference: M. Luo, C.-M. Li, F. Xiao, F. Manya, and Z. L. , “An effective learnt clause minimization approach for cdcl sat solvers,” in IJCAI-2017, 2017, pp.703-711.
+ 
+Maple_CM, Based on Maple_LCM --Copyright (c) 2018, Chu-Min LI, Mao Luo, Fan Xiao: implementing a clause minimisation approach.
+ 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
 including without limitation the rights to use, copy, modify, merge, publish, distribute,
@@ -342,42 +347,6 @@ protected:
         return lbd;
     }
 
-#ifdef BIN_DRUP
-    static int buf_len;
-    static unsigned char drup_buf[];
-    static unsigned char* buf_ptr;
-
-    static inline void byteDRUP(Lit l){
-        unsigned int u = 2 * (var(l) + 1) + sign(l);
-        do{
-            *buf_ptr++ = u & 0x7f | 0x80; buf_len++;
-            u = u >> 7;
-        }while (u);
-        *(buf_ptr - 1) &= 0x7f; // End marker of this unsigned number.
-    }
-
-    template<class V>
-    static inline void binDRUP(unsigned char op, const V& c, FILE* drup_file){
-        assert(op == 'a' || op == 'd');
-        *buf_ptr++ = op; buf_len++;
-        for (int i = 0; i < c.size(); i++) byteDRUP(c[i]);
-        *buf_ptr++ = 0; buf_len++;
-        if (buf_len > 1048576) binDRUP_flush(drup_file);
-    }
-
-    static inline void binDRUP_strengthen(const Clause& c, Lit l, FILE* drup_file){
-        *buf_ptr++ = 'a'; buf_len++;
-        for (int i = 0; i < c.size(); i++)
-            if (c[i] != l) byteDRUP(c[i]);
-        *buf_ptr++ = 0; buf_len++;
-        if (buf_len > 1048576) binDRUP_flush(drup_file);
-    }
-
-    static inline void binDRUP_flush(FILE* drup_file){
-        fwrite_unlocked(drup_buf, sizeof(unsigned char), buf_len, drup_file);
-        buf_ptr = drup_buf; buf_len = 0;
-    }
-#endif
 
     // Static helpers:
     //
@@ -392,6 +361,79 @@ protected:
     // Returns a random integer 0 <= x < size. Seed must never be 0.
     static inline int irand(double& seed, int size) {
         return (int)(drand(seed) * size); }
+
+    // simplify
+    //
+public:
+    
+#ifdef BIN_DRUP
+    static int buf_len;
+    static unsigned char drup_buf[];
+    static unsigned char* buf_ptr;
+    
+    static inline void byteDRUP(Lit l){
+        unsigned int u = 2 * (var(l) + 1) + sign(l);
+        do{
+            *buf_ptr++ = u & 0x7f | 0x80; buf_len++;
+            u = u >> 7;
+        }while (u);
+        *(buf_ptr - 1) &= 0x7f; // End marker of this unsigned number.
+    }
+    
+    template<class V>
+    static inline void binDRUP(unsigned char op, const V& c, FILE* drup_file){
+        assert(op == 'a' || op == 'd');
+        *buf_ptr++ = op; buf_len++;
+        for (int i = 0; i < c.size(); i++) byteDRUP(c[i]);
+        *buf_ptr++ = 0; buf_len++;
+        if (buf_len > 1048576) binDRUP_flush(drup_file);
+    }
+    
+    static inline void binDRUP_strengthen(const Clause& c, Lit l, FILE* drup_file){
+        *buf_ptr++ = 'a'; buf_len++;
+        for (int i = 0; i < c.size(); i++)
+            if (c[i] != l) byteDRUP(c[i]);
+        *buf_ptr++ = 0; buf_len++;
+        if (buf_len > 1048576) binDRUP_flush(drup_file);
+    }
+    
+    static inline void binDRUP_flush(FILE* drup_file){
+        //        fwrite(drup_buf, sizeof(unsigned char), buf_len, drup_file);
+        fwrite_unlocked(drup_buf, sizeof(unsigned char), buf_len, drup_file);
+        buf_ptr = drup_buf; buf_len = 0;
+    }
+#endif
+    
+    bool	simplifyAll();
+    bool	simplifyLearnt(Clause& c, CRef cr, vec<Lit>& lits);
+    // bool	simplifyLearnt_x(vec<CRef>& learnts_x);
+    bool	simplifyLearnt_core();
+    bool	simplifyLearnt_tier2();
+    bool        simplifyOriginalClauses();
+    int		trailRecord;
+    void	litsEnqueue(int cutP, Clause& c);
+    void	cancelUntilTrailRecord();
+    void	simpleUncheckEnqueue(Lit p, CRef from = CRef_Undef);
+    CRef    simplePropagate();
+    uint64_t nbSimplifyAll;
+    uint64_t simplified_length_record, original_length_record;
+    uint64_t s_propagations;
+
+    vec<Lit> simp_learnt_clause;
+    // vec<CRef> simp_reason_clause;
+    void	simpleAnalyze(CRef confl, vec<Lit>& out_learnt, bool True_confl);
+
+    // in redundant
+    bool removed(CRef cr);
+    // adjust simplifyAll occasion
+    long curSimplify;
+    uint64_t nbconfbeforesimplify;
+    int incSimplify;
+
+    vec<CRef> usedClauses;
+
+    bool simplifyUsedOriginalClauses();
+
 };
 
 

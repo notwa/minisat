@@ -4,6 +4,11 @@ MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
 
 Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
 
+Maple_LCM, Based on MapleCOMSPS_DRUP --Copyright (c) 2017, Mao Luo, Chu-Min LI, Fan Xiao: implementing a learnt clause minimisation approach
+ Reference: M. Luo, C.-M. Li, F. Xiao, F. Manya, and Z. L. , “An effective learnt clause minimization approach for cdcl sat solvers,” in IJCAI-2017, 2017, pp.703-711.
+ 
+Maple_CM, Based on Maple_LCM --Copyright (c) 2018, Chu-Min LI, Mao Luo, Fan Xiao: implementing a clause minimisation approach.
+ 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
 including without limitation the rights to use, copy, modify, merge, publish, distribute,
@@ -49,7 +54,7 @@ struct Lit {
     int     x;
 
     // Use this as a constructor:
-    friend Lit mkLit(Var var, bool sign = false);
+    friend Lit mkLit(Var var, bool sign );
 
     bool operator == (Lit p) const { return x == p.x; }
     bool operator != (Lit p) const { return x != p.x; }
@@ -57,7 +62,7 @@ struct Lit {
 };
 
 
-inline  Lit  mkLit     (Var var, bool sign) { Lit p; p.x = var + var + (int)sign; return p; }
+inline  Lit  mkLit     (Var var, bool sign= false) { Lit p; p.x = var + var + (int)sign; return p; }
 inline  Lit  operator ~(Lit p)              { Lit q; q.x = p.x ^ 1; return q; }
 inline  Lit  operator ^(Lit p, bool b)      { Lit q; q.x = p.x ^ (unsigned int)b; return q; }
 inline  bool sign      (Lit p)              { return p.x & 1; }
@@ -124,13 +129,17 @@ typedef RegionAllocator<uint32_t>::Ref CRef;
 
 class Clause {
     struct {
-        unsigned mark      : 2;
         unsigned learnt    : 1;
         unsigned has_extra : 1;
         unsigned reloced   : 1;
-        unsigned lbd       : 26;
         unsigned removable : 1;
-        unsigned size      : 32; }                            header;
+        unsigned mark      : 2;
+        unsigned simplified     : 8;
+      unsigned used             : 18;
+        unsigned lbd       : 26;
+        unsigned size      : 32; 
+		//simplify
+	}                            header;
     union { Lit lit; float act; uint32_t abs; uint32_t touched; CRef rel; } data[0];
 
     friend class ClauseAllocator;
@@ -143,8 +152,12 @@ class Clause {
         header.has_extra = learnt | use_extra;
         header.reloced   = 0;
         header.size      = ps.size();
-        header.lbd       = 0;
+        header.lbd       = ps.size();
         header.removable = 1;
+		//simplify
+		//
+		header.simplified = 0;
+		header.used = 0;
 
         for (int i = 0; i < ps.size(); i++) 
             data[i].lit = ps[i];
@@ -167,7 +180,14 @@ public:
 
 
     int          size        ()      const   { return header.size; }
-    void         shrink      (int i)         { assert(i <= size()); if (header.has_extra) data[header.size-i] = data[header.size]; header.size -= i; }
+    void         shrink      (int i)         { 
+      assert(i <= size()); 
+      if (header.has_extra) {
+	data[header.size-i] = data[header.size];
+	data[header.size-i+1] = data[header.size+1];
+      }
+      header.size -= i; 
+    }
     void         pop         ()              { shrink(1); }
     bool         learnt      ()      const   { return header.learnt; }
     bool         has_extra   ()      const   { return header.has_extra; }
@@ -196,6 +216,15 @@ public:
 
     Lit          subsumes    (const Clause& other) const;
     void         strengthen  (Lit p);
+
+	// simplify
+	//
+	void setSimplified(int b) { header.simplified = b; }
+	int simplified() { return header.simplified; }
+
+	void setUsed(unsigned b) {header.used = b;}
+	unsigned used() {return header.used;}
+
 };
 
 
@@ -257,10 +286,13 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         // Copy extra data-fields: 
         // (This could be cleaned-up. Generalize Clause-constructor to be applicable here instead?)
         to[cr].mark(c.mark());
+	// simplify
+	to[cr].setSimplified(c.simplified());
+	to[cr].setUsed(c.used());
+	to[cr].set_lbd(c.lbd());
         if (to[cr].learnt()){
             to[cr].touched() = c.touched();
             to[cr].activity() = c.activity();
-            to[cr].set_lbd(c.lbd());
             to[cr].removable(c.removable());
         }
         else if (to[cr].has_extra()) to[cr].calcAbstraction();
