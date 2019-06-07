@@ -1,0 +1,89 @@
+diff --git a/glucose-1.0.orig/sources/glucose/core/Main.C b/glucose-1.0/sources/glucose/core/Main.C
+index eaafaa5..6505c7b 100644
+--- a/glucose-1.0.orig/sources/glucose/core/Main.C
++++ b/glucose-1.0/sources/glucose/core/Main.C
+@@ -21,6 +21,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
+ #include <cstring>
+ #include <stdint.h>
+ #include <errno.h>
++#define __STDC_FORMAT_MACROS 1
++#include <inttypes.h>
+ 
+ #include <signal.h>
+ #include <zlib.h>
+@@ -145,7 +147,7 @@ static void readClause(B& in, Solver& S, vec<Lit>& lits) {
+ }
+ 
+ template<class B>
+-static bool match(B& in, char* str) {
++static bool match(B& in, const char* str) {
+     for (; *str != 0; ++str, ++in)
+         if (*str != *in)
+             return false;
+@@ -191,15 +193,15 @@ void printStats(Solver& solver)
+ {
+     double   cpu_time = cpuTime();
+     uint64_t mem_used = memUsed();
+-    reportf("c restarts              : %lld\n", solver.starts);
+-    reportf("c nb ReduceDB           : %lld\n", solver.nbReduceDB);
+-    reportf("c nb learnts DL2        : %lld\n", solver.nbDL2);
+-    reportf("c nb learnts size 2     : %lld\n", solver.nbBin);
+-    reportf("c nb learnts size 1     : %lld\n", solver.nbUn);
+-    reportf("c conflicts             : %-12lld   (%.0f /sec)\n", solver.conflicts   , solver.conflicts   /cpu_time);
+-    reportf("c decisions             : %-12lld   (%4.2f %% random) (%.0f /sec)\n", solver.decisions, (float)solver.rnd_decisions*100 / (float)solver.decisions, solver.decisions   /cpu_time);
+-    reportf("c propagations          : %-12lld   (%.0f /sec)\n", solver.propagations, solver.propagations/cpu_time);
+-    reportf("c conflict literals     : %-12lld   (%4.2f %% deleted)\n", solver.tot_literals, (solver.max_literals - solver.tot_literals)*100 / (double)solver.max_literals);
++    reportf("c restarts              : %" PRIu64 "\n", solver.starts);
++    reportf("c nb ReduceDB           : %" PRIu64 "\n", solver.nbReduceDB);
++    reportf("c nb learnts DL2        : %" PRIu64 "\n", solver.nbDL2);
++    reportf("c nb learnts size 2     : %" PRIu64 "\n", solver.nbBin);
++    reportf("c nb learnts size 1     : %" PRIu64 "\n", solver.nbUn);
++    reportf("c conflicts             : %-12" PRIu64 "   (%.0f /sec)\n", solver.conflicts   , solver.conflicts   /cpu_time);
++    reportf("c decisions             : %-12" PRIu64 "   (%4.2f %% random) (%.0f /sec)\n", solver.decisions, (float)solver.rnd_decisions*100 / (float)solver.decisions, solver.decisions   /cpu_time);
++    reportf("c propagations          : %-12" PRIu64 "   (%.0f /sec)\n", solver.propagations, solver.propagations/cpu_time);
++    reportf("c conflict literals     : %-12" PRIu64 "   (%4.2f %% deleted)\n", solver.tot_literals, (solver.max_literals - solver.tot_literals)*100 / (double)solver.max_literals);
+     if (mem_used != 0) reportf("c Memory used           : %.2f MB\n", mem_used / 1048576.0);
+     reportf("c CPU time              : %g s\n", cpu_time);
+ }
+diff --git a/glucose-1.0.orig/sources/glucose/core/Solver.C b/glucose-1.0/sources/glucose/core/Solver.C
+index 9927d8b..80a66fa 100644
+--- a/glucose-1.0.orig/sources/glucose/core/Solver.C
++++ b/glucose-1.0/sources/glucose/core/Solver.C
+@@ -733,7 +733,6 @@ lbool Solver::search(int nof_conflicts, int nof_learnts)
+     vec<Lit>    learnt_clause;
+     int nblevels=0,nbCC=0,merged=0;
+     starts++;
+-    bool first = true;
+ 
+     for (;;){
+ 
+@@ -743,8 +742,6 @@ lbool Solver::search(int nof_conflicts, int nof_learnts)
+ 	  conflicts++; conflictsC++;cons++;nbCC++;
+             if (decisionLevel() == 0) return l_False;
+ 
+-            first = false;
+-
+             learnt_clause.clear();
+             analyze(confl, learnt_clause, backtrack_level,nblevels,merged);
+ 
+@@ -914,6 +911,7 @@ void Solver::verifyModel()
+     next:;
+     }
+ 
++    (void) failed;
+     assert(!failed);
+ 
+     reportf("Verified %d original clauses.\n", clauses.size());
+diff --git a/glucose-1.0.orig/sources/glucose/core/Solver.h b/glucose-1.0/sources/glucose/core/Solver.h
+index 3a3fc14..8eaa94d 100644
+--- a/glucose-1.0.orig/sources/glucose/core/Solver.h
++++ b/glucose-1.0/sources/glucose/core/Solver.h
+@@ -250,7 +250,7 @@ inline void Solver::claBumpActivity (Clause& c) {  // LS
+             // Rescale:
+             for (int i = 0; i < learnts.size(); i++)
+                 learnts[i]->oldActivity() *= 1e-20;
+-		cla_inc *= 1e-20; } }
++            cla_inc *= 1e-20; } }
+ 
+ inline bool     Solver::enqueue         (Lit p, Clause* from)   { return value(p) != l_Undef ? value(p) != l_False : (uncheckedEnqueue(p, from), true); }
+ inline bool     Solver::locked          (const Clause& c) const { return reason[var(c[0])] == &c && value(c[0]) == l_True; }
