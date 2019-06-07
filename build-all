@@ -260,6 +260,17 @@ build-MapleCOMSPS() {
     cp minisat_static "$bin/MapleCOMSPS"
 }
 
+build-MapleCM() {
+    prepare MapleCM
+
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp glucose_static "$bin/MapleCM"
+}
+
 build-MapleLCMDist() {
     prepare MapleLCMDist
 
@@ -317,6 +328,7 @@ build-COMiniSatPS-02
 build-COMiniSatPS-2015
 build-COMiniSatPS-2016
 build-MapleCOMSPS
+build-MapleCM
 build-MapleLCMDist
 build-MapleLCMDistChronoBT
 
