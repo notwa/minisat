@@ -1,0 +1,57 @@
+diff --git a/core/Main.cc b/core/Main.cc
+index 4388c3e..fe316f3 100644
+--- a/core/Main.cc
++++ b/core/Main.cc
+@@ -74,9 +74,13 @@ int main(int argc, char** argv)
+         setUsageHelp("USAGE: %s [options] <input-file> <result-output-file>\n\n  where input may be either in plain or gzipped DIMACS.\n");
+         // printf("This is MiniSat 2.0 beta\n");
+         
+-#if defined(__linux__)
+-        fpu_control_t oldcw, newcw;
+-        _FPU_GETCW(oldcw); newcw = (oldcw & ~_FPU_EXTENDED) | _FPU_DOUBLE; _FPU_SETCW(newcw);
++#if defined(__x86_64) || defined(__i386) || defined(_M_IX86) || defined(_X86_) || defined(__X86__)
++        // Only correct FPU precision on architectures that need and support it:
++        fenv_t fenv;
++        fegetenv(&fenv);
++        fenv.__control_word &= ~0x300; // _FPU_EXTENDED
++        fenv.__control_word |= 0x200; // _FPU_DOUBLE
++        fesetenv(&fenv);
+         printf("WARNING: for repeatability, setting FPU to use double precision\n");
+ #endif
+         // Extra options:
+diff --git a/simp/Main.cc b/simp/Main.cc
+index e59d73b..865c847 100644
+--- a/simp/Main.cc
++++ b/simp/Main.cc
+@@ -74,9 +74,13 @@ int main(int argc, char** argv)
+         setUsageHelp("USAGE: %s [options] <input-file> <result-output-file>\n\n  where input may be either in plain or gzipped DIMACS.\n");
+         // printf("This is MiniSat 2.0 beta\n");
+         
+-#if defined(__linux__)
+-        fpu_control_t oldcw, newcw;
+-        _FPU_GETCW(oldcw); newcw = (oldcw & ~_FPU_EXTENDED) | _FPU_DOUBLE; _FPU_SETCW(newcw);
++#if defined(__x86_64) || defined(__i386) || defined(_M_IX86) || defined(_X86_) || defined(__X86__)
++        // Only correct FPU precision on architectures that need and support it:
++        fenv_t fenv;
++        fegetenv(&fenv);
++        fenv.__control_word &= ~0x300; // _FPU_EXTENDED
++        fenv.__control_word |= 0x200; // _FPU_DOUBLE
++        fesetenv(&fenv);
+         printf("WARNING: for repeatability, setting FPU to use double precision\n");
+ #endif
+         // Extra options:
+diff --git a/utils/System.h b/utils/System.h
+index 1758192..ac55cb3 100644
+--- a/utils/System.h
++++ b/utils/System.h
+@@ -21,9 +21,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
+ #ifndef Minisat_System_h
+ #define Minisat_System_h
+ 
+-#if defined(__linux__)
+-#include <fpu_control.h>
+-#endif
++#include <fenv.h>
+ 
+ #include "mtl/IntTypes.h"
+ 
