@@ -1,0 +1,66 @@
+diff --git a/sources/glucose/core/Solver.C b/sources/glucose/core/Solver.C
+index a8bafc1..9927d8b 100644
+--- a/sources/glucose/core/Solver.C
++++ b/sources/glucose/core/Solver.C
+@@ -142,7 +142,7 @@ bool Solver::addClause(vec<Lit>& ps)
+         uncheckedEnqueue(ps[0]);
+         return ok = (propagate() == NULL);
+     }else{
+-        Clause* c = Clause_new(ps, false);
++        Clause* c = Clause::Clause_new(ps, false);
+         clauses.push(c);
+         attachClause(*c);
+     }
+@@ -760,7 +760,7 @@ lbool Solver::search(int nof_conflicts, int nof_learnts)
+ 	      uncheckedEnqueue(learnt_clause[0]);
+ 	      nbUn++;
+             }else{
+-	      Clause* c = Clause_new(learnt_clause, true);
++	      Clause* c = Clause::Clause_new(learnt_clause, true);
+ 	      learnts.push(c);
+ 	      c->setActivity(nblevels); // LS
+ 	      if(nblevels<=2) nbDL2++;
+diff --git a/sources/glucose/core/SolverTypes.h b/sources/glucose/core/SolverTypes.h
+index f218716..d23cd4b 100644
+--- a/sources/glucose/core/SolverTypes.h
++++ b/sources/glucose/core/SolverTypes.h
+@@ -121,7 +121,7 @@ public:
+ 
+     // -- use this function instead:
+     template<class V>
+-    friend Clause* Clause_new(const V& ps, bool learnt = false) {
++    static Clause* Clause_new(const V& ps, bool learnt = false) {
+         assert(sizeof(Lit)      == sizeof(uint32_t));
+         assert(sizeof(float)    == sizeof(uint32_t));
+         void* mem = malloc(sizeof(Clause) + sizeof(uint32_t)*(ps.size()));
+diff --git a/sources/glucose/mtl/template.mk b/sources/glucose/mtl/template.mk
+index 546c6d1..783d8f8 100644
+--- a/sources/glucose/mtl/template.mk
++++ b/sources/glucose/mtl/template.mk
+@@ -33,17 +33,17 @@ lib:	lib$(LIB).a
+ libd:	lib$(LIB)d.a
+ 
+ ## Compile options
+-%.o:			CFLAGS +=-m32 $(COPTIMIZE) -ggdb -D DEBUG
+-%.op:			CFLAGS +=-m32 $(COPTIMIZE) -pg -ggdb -D NDEBUG
+-%.od:			CFLAGS +=-m32 -O0 -ggdb -D DEBUG # -D INVARIANTS
+-%.or:			CFLAGS +=-m32 $(COPTIMIZE) -D NDEBUG
++%.o:			CFLAGS +=$(COPTIMIZE) -ggdb -D DEBUG
++%.op:			CFLAGS +=$(COPTIMIZE) -pg -ggdb -D NDEBUG
++%.od:			CFLAGS +=-O0 -ggdb -D DEBUG # -D INVARIANTS
++%.or:			CFLAGS +=$(COPTIMIZE) -D NDEBUG
+ 
+ ## Link options
+-$(EXEC):		LFLAGS := -m32 -ggdb $(LFLAGS)
+-$(EXEC)_profile:	LFLAGS := -m32 -ggdb -pg $(LFLAGS)
+-$(EXEC)_debug:		LFLAGS := -m32 -ggdb $(LFLAGS)
+-$(EXEC)_release:	LFLAGS := -m32 $(LFLAGS)
+-$(EXEC)_static:		LFLAGS := -m32 --static $(LFLAGS)
++$(EXEC):		LFLAGS := -ggdb $(LFLAGS)
++$(EXEC)_profile:	LFLAGS := -ggdb -pg $(LFLAGS)
++$(EXEC)_debug:		LFLAGS := -ggdb $(LFLAGS)
++$(EXEC)_release:	LFLAGS := $(LFLAGS)
++$(EXEC)_static:		LFLAGS := --static $(LFLAGS)
+ 
+ ## Dependencies
+ $(EXEC):		$(COBJS)
