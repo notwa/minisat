@@ -67,6 +67,12 @@ tweak-exit-codes() {
     done
 }
 
+fix-drup-segfault() {
+    find-code-files | while read -r file; do
+        sed -i -e 's/saved_size!=c.size()/drup_file \&\& \0/' "$file"
+    done
+}
+
 strip-symbols() {
     for file in "$@"; do
         objcopy -S "$file"
@@ -260,6 +266,30 @@ build-MapleCOMSPS() {
     cp minisat_static "$bin/MapleCOMSPS"
 }
 
+build-MapleLCM() {
+    prepare MapleLCM
+
+    fix-drup-segfault
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp glucose_static "$bin/MapleLCM"
+}
+
+build-MapleLCMDist() {
+    prepare MapleLCMDist
+
+    fix-drup-segfault
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp glucose_static "$bin/MapleLCMDist"
+}
+
 build-MapleCM() {
     prepare MapleCM
 
@@ -269,18 +299,6 @@ build-MapleCM() {
     cd simp
     make rs
     cp glucose_static "$bin/MapleCM"
-}
-
-build-MapleLCMDist() {
-    prepare MapleLCMDist
-
-    apply-patch maple-fix-drup-segfault.patch
-    fix-literal-suffix
-    replace-fpu_control-with-fenv
-
-    cd simp
-    make rs
-    cp glucose_static "$bin/MapleLCMDist"
 }
 
 build-MapleLCMDistChronoBT() {
@@ -328,8 +346,9 @@ build-COMiniSatPS-02
 build-COMiniSatPS-2015
 build-COMiniSatPS-2016
 build-MapleCOMSPS
-build-MapleCM
+build-MapleLCM
 build-MapleLCMDist
+build-MapleCM
 build-MapleLCMDistChronoBT
 
 cd "$root"
