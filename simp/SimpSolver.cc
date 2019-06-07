@@ -1,9 +1,13 @@
 /***********************************************************************************[SimpSolver.cc]
 MiniSat -- Copyright (c) 2006,      Niklas Een, Niklas Sorensson
            Copyright (c) 2007-2010, Niklas Sorensson
-
+ 
 Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
-
+ 
+Maple_LCM, Based on MapleCOMSPS_DRUP --Copyright (c) 2017, Mao Luo, Chu-Min LI, Fan Xiao: implementing a learnt clause minimisation approach
+Reference: M. Luo, C.-M. Li, F. Xiao, F. Manya, and Z. L. , “An effective learnt clause minimization approach for cdcl sat solvers,” in IJCAI-2017, 2017, pp. to–appear.
+ 
+ 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
 including without limitation the rights to use, copy, modify, merge, publish, distribute,

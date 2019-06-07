@@ -3,7 +3,11 @@ MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
            Copyright (c) 2007-2010, Niklas Sorensson
 
 Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
-
+ 
+Maple_LCM, Based on MapleCOMSPS_DRUP --Copyright (c) 2017, Mao Luo, Chu-Min LI, Fan Xiao: implementing a learnt clause minimisation approach
+Reference: M. Luo, C.-M. Li, F. Xiao, F. Manya, and Z. L. , “An effective learnt clause minimization approach for cdcl sat solvers,” in IJCAI-2017, 2017, pp. to–appear.
+ 
+ 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
 including without limitation the rights to use, copy, modify, merge, publish, distribute,
@@ -392,6 +396,35 @@ protected:
     // Returns a random integer 0 <= x < size. Seed must never be 0.
     static inline int irand(double& seed, int size) {
         return (int)(drand(seed) * size); }
+
+	// simplify
+	//
+public:
+	bool	simplifyAll();
+	void	simplifyLearnt(Clause& c);
+	bool	simplifyLearnt_x(vec<CRef>& learnts_x);
+	bool	simplifyLearnt_core();
+	bool	simplifyLearnt_tier2();
+	int		trailRecord;
+	void	litsEnqueue(int cutP, Clause& c);
+	void	cancelUntilTrailRecord();
+	void	simpleUncheckEnqueue(Lit p, CRef from = CRef_Undef);
+	CRef    simplePropagate();
+	uint64_t nbSimplifyAll;
+	uint64_t simplified_length_record, original_length_record;
+	uint64_t s_propagations;
+
+	vec<Lit> simp_learnt_clause;
+	vec<CRef> simp_reason_clause;
+	void	simpleAnalyze(CRef confl, vec<Lit>& out_learnt, vec<CRef>& reason_clause, bool True_confl);
+
+	// in redundant
+	bool removed(CRef cr);
+	// adjust simplifyAll occasion
+	long curSimplify;
+	int nbconfbeforesimplify;
+	int incSimplify;
+
 };
 
 
