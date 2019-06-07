@@ -1,0 +1,325 @@
+#!/usr/bin/env bash
+
+set -e
+
+retrieve-patch() {
+    local patch="$1"
+    if [ -e "$patch" ]; then
+        mv "$patch" "$patch.bak"
+    fi
+    git show patches:"$patch" > "${patch##*/}"
+}
+
+apply-patch() {
+    local patch="$1"
+    local components="${2:-1}"
+    retrieve-patch "$patch"
+    patch "-p$components" < "${patch##*/}"
+}
+
+retrieve-source() {
+    cd "$root"
+    local refspec="$1"
+    local subdir="$2"
+    mkdir -p "$subdir"
+    git archive "$refspec" | tar -x -C "$subdir"
+}
+
+find-code-files() {
+    find -name '*.C' -type f \
+      -or -name '*.cc' -type f \
+      -or -name '*.h' -type f
+}
+
+replace-fpu_control-with-fenv() {
+    # fpu_control.h is not available on all systems. fenv.h is more common.
+    find-code-files | while read -r file; do
+        sed -i \
+          -e 's/fpu_control.h/fenv.h/g' \
+          -e 's/fpu_control_t oldcw, newcw;/fenv_t fenv;/g' \
+          -e 's/_FPU_GETCW.*/fegetenv(\&fenv); fenv.__control_word \&= ~0x300; fenv.__control_word |= 0x200; fesetenv(\&fenv);/g' \
+          -e 's/.*defined(_FPU_EXTENDED).*/#ifdef __linux__/' \
+          "$file"
+    done
+}
+
+fix-literal-suffix() {
+    find-code-files | while read -r file; do
+        sed -i -e 's/"\(PRI[iu]64\)/" \1/g' -e 's/\(PRI[iu]64\)"/\1 "/g' "$file"
+    done
+}
+
+fix-Clause_new() {
+    find-code-files | while read -r file; do
+        sed -i \
+          -e 's/friend Clause/static Clause/' \
+          -e 's/= Clause_new/= Clause::Clause_new/' \
+          -e 's/(Clause_new/(Clause::Clause_new/' \
+          "$file"
+    done
+}
+
+tweak-exit-codes() {
+    find-code-files | while read -r file; do
+        sed -i \
+          -e 's/ret == l_True ? 10 : ret == l_False ? 20 : 0/ret != l_True/' \
+          "$file"
+    done
+}
+
+strip-symbols() {
+    for file in "$@"; do
+        objcopy -S "$file"
+    done
+}
+
+prepare() { # TODO: rename
+    local subdir="$1"
+    local refspec="${2:-$1}"
+    retrieve-source "$refspec" "$builds/$subdir"
+    cd "$builds/$subdir"
+}
+
+build-minisat-2.0() {
+    prepare minisat-2.0 minisat2-070721
+
+    apply-patch minisat-2.0-silence-warnings.patch 2
+    fix-Clause_new
+    replace-fpu_control-with-fenv
+
+    cd simp
+    # for some reason, flags get ignored if not set explicitly.
+    make rs CFLAGS="$MINISAT_2_0_CFLAGS $CFLAGS"
+    cp minisat_static "$bin/minisat-2.0"
+}
+
+build-minisat-2.2.0() {
+    prepare minisat-2.2.0
+
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp minisat_static "$bin/minisat-2.2.0"
+}
+
+build-minisat-master() {
+    prepare minisat-master 37dc6c6
+
+    apply-patch OpenBSD/patch-minisat_core_SolverTypes_h 0
+    apply-patch OpenBSD/patch-minisat_core_Solver_cc 0
+    apply-patch OpenBSD/patch-minisat_utils_Options_h 0
+    apply-patch OpenBSD/patch-minisat_utils_System_cc 0
+    replace-fpu_control-with-fenv
+
+    make r
+    cp build/release/bin/minisat "$bin/minisat-master"
+}
+
+build-glucose-1.0() {
+    prepare glucose-1.0
+
+    apply-patch glucose-1.0-silence-warnings.patch 2
+    fix-Clause_new
+    replace-fpu_control-with-fenv
+
+    cd sources/glucose/core
+    # flags need to be set explicitly, else a 32-bit binary is *always* built.
+    make rs CFLAGS="$MINISAT_2_0_CFLAGS $CFLAGS" LFLAGS="--static -lz"
+    cp glucose_static "$bin/glucose-1.0"
+}
+
+build-glucose-2.0() {
+    prepare glucose-2.0
+
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+    tweak-exit-codes
+
+    # there's a simp directory, but it's not used for this version.
+    cd sources/glucose/core
+    make rs
+    cp glucose_static "$bin/glucose-2.0"
+}
+
+build-glucose-2.1() {
+    prepare glucose-2.1
+
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+    tweak-exit-codes
+
+    # there's a simp directory, but it's not used for this version.
+    cd sources/glucose/core
+    make rs
+    cp glucose_static "$bin/glucose-2.1"
+}
+
+build-glucose-3.0() {
+    prepare glucose-3.0
+
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp glucose_static "$bin/glucose-3.0"
+}
+
+build-glucose-4.0() {
+    prepare glucose-4.0
+
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp glucose_static "$bin/glucose-4.0"
+}
+
+build-glucose-4.1() {
+    prepare glucose-4.1
+
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp glucose_static "$bin/glucose-4.1"
+}
+
+build-minisat-to-glucose() {
+    prepare minisat-to-glucose minisat-2.2.0
+
+    apply-patch COMiniSatPS/minisat-2.2.0-to-glucose.patch
+    apply-patch COMiniSatPS/binary-watches.patch
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp minisat_static "$bin/minisat-to-glucose"
+}
+
+build-COMiniSatPS-01() {
+    prepare COMiniSatPS-01 minisat-2.2.0
+
+    apply-patch COMiniSatPS/01_minisat2glucoseSC13.patch
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp minisat_static "$bin/COMiniSatPS-01"
+}
+
+build-COMiniSatPS-02() {
+    prepare COMiniSatPS-02 minisat-2.2.0
+
+    apply-patch COMiniSatPS/01_minisat2glucoseSC13.patch
+    apply-patch COMiniSatPS/02_SWDiA5BY_SC14.patch
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp minisat_static "$bin/COMiniSatPS-02"
+}
+
+build-COMiniSatPS-2015() {
+    prepare COMiniSatPS-2015 15fabea
+
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp minisat_static "$bin/COMiniSatPS-2015"
+}
+
+build-COMiniSatPS-2016() {
+    prepare COMiniSatPS-2016 e2642bb
+
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp minisat_static "$bin/COMiniSatPS-2016"
+}
+
+build-MapleCOMSPS() {
+    prepare MapleCOMSPS
+
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp minisat_static "$bin/MapleCOMSPS"
+}
+
+build-MapleLCMDist() {
+    prepare MapleLCMDist
+
+    apply-patch maple-fix-drup-segfault.patch
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp glucose_static "$bin/MapleLCMDist"
+}
+
+build-MapleLCMDistChronoBT() {
+    prepare MapleLCMDistChronoBT
+
+    fix-literal-suffix
+    replace-fpu_control-with-fenv
+
+    cd simp
+    make rs
+    cp glucose_static "$bin/MapleLCMDistChronoBT"
+}
+
+root="$(readlink -f "$(dirname "$0")" )"
+bin="$root/bin"
+builds="$root/builds"
+
+flags=(
+    -Wno-misleading-indentation
+    -Wno-unused-but-set-variable
+    -Werror=literal-suffix
+)
+
+mkdir -p "$bin"
+mkdir -p "$builds"
+
+MINISAT_2_0_CFLAGS="-I../mtl -I../core -Wall -ffloat-store -O3 -D NDEBUG"
+
+export MROOT=../
+export CXXFLAGS="${flags[@]}"
+export CFLAGS="${flags[@]}"
+
+build-minisat-2.0
+build-minisat-2.2.0
+build-minisat-master
+build-glucose-1.0
+build-glucose-2.0
+build-glucose-2.1
+build-glucose-3.0
+build-glucose-4.0
+build-glucose-4.1
+build-minisat-to-glucose
+build-COMiniSatPS-01
+build-COMiniSatPS-02
+build-COMiniSatPS-2015
+build-COMiniSatPS-2016
+build-MapleCOMSPS
+build-MapleLCMDist
+build-MapleLCMDistChronoBT
+
+cd "$root"
+
+strip-symbols "$bin"/*
