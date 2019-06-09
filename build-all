@@ -59,14 +59,6 @@ fix-Clause_new() {
     done
 }
 
-tweak-exit-codes() {
-    find-code-files | while read -r file; do
-        sed -i \
-          -e 's/ret == l_True ? 10 : ret == l_False ? 20 : 0/ret != l_True/' \
-          "$file"
-    done
-}
-
 fix-drup-segfault() {
     find-code-files | while read -r file; do
         sed -i -e 's/saved_size!=c.size()/drup_file \&\& \0/' "$file"
@@ -148,7 +140,6 @@ build-glucose-1.0() {
 build-glucose-2.0() {
     fetch glucose-2.0
 
-    tweak-exit-codes
     fix-literal-suffix
     replace-fpu_control-with-fenv
 
@@ -161,7 +152,6 @@ build-glucose-2.0() {
 build-glucose-2.1() {
     fetch glucose-2.1
 
-    tweak-exit-codes
     fix-literal-suffix
     replace-fpu_control-with-fenv
 
