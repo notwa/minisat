@@ -20,7 +20,37 @@ Note that only Linux is currently supported.
 
 ## Included Versions
 
-### [branch master][mp]
+You can download any of the versions on GitHub by following the appropriate link
+and clicking on the green "Clone or download" link on the top right.
+Select "Download Zip" if you're not familiar with git.
+
+[homepage]: http://minisat.se/MiniSat.html
+[master]: https://github.com/notwa/minisat/tree/master
+[mp]: https://github.com/notwa/minisat/tree/master-patched
+[upstream]: https://github.com/niklasso/minisat/tree/master
+[patches]: https://github.com/notwa/minisat/tree/patches
+[v220]: https://github.com/notwa/minisat/tree/releases/2.2.0
+[v200]: https://github.com/notwa/minisat/tree/releases/2.0.0
+[comsps]: https://github.com/notwa/minisat/tree/COMiniSatPS
+[ms2glu]: https://github.com/notwa/minisat/tree/minisat-to-glucose
+[comsps_archive]: https://web.archive.org/web/20171023151341/http://www.cs.nyu.edu/~chanseok/cominisatps/
+[mcomsps]: https://github.com/notwa/minisat/tree/MapleCOMSPS
+[mlcm]: https://github.com/notwa/minisat/tree/MapleLCM
+[mlcmd]: https://github.com/notwa/minisat/tree/MapleLCMDist
+[mlcmdcbt]: https://github.com/notwa/minisat/tree/MapleLCMDistChronoBT
+[mlcmd_patch]: https://github.com/notwa/minisat/blob/patches/maple-fix-drup-segfault.patch
+[license_mit]: https://choosealicense.com/licenses/mit/
+[glucose]: https://www.labri.fr/perso/lsimon/glucose/
+[glu10]: https://github.com/notwa/minisat/tree/glucose-1.0
+[glu20]: https://github.com/notwa/minisat/tree/glucose-2.0
+[glu21]: https://github.com/notwa/minisat/tree/glucose-2.1
+[glu23]: https://github.com/notwa/minisat/tree/glucose-2.3
+[glu30]: https://github.com/notwa/minisat/tree/glucose-3.0
+[glu40]: https://github.com/notwa/minisat/tree/glucose-4.0
+[glu41]: https://github.com/notwa/minisat/tree/glucose-4.1
+
+
+### [branch master][master]
 
 This is just a clone of [the upstream master branch.][upstream]
 
@@ -74,7 +104,8 @@ This is based on MapleCOMSPS.
 ### [branch MapleLCMDist][mlcmd]
 
 Ranking first on the main track of [the 2017 SAT Competition,][comp2017]
-this is a variation of MapleLCM which is based on MapleCOMSPS.
+this adds a distance heuristic to MapleLCM,
+which in turn is based on MapleCOMSPS.
 Note that a patch is available to
 [fix a crash in MapleLCMDist's DRUP-outputting code.][mlcmd_patch]
 <!-- TODO: authors? -->
@@ -87,8 +118,8 @@ this is based on MapleLCMDist.
 
 ### [branch glucose-1.0][glu10]
 
-The original Glucose via [the Glucose homepage,][glucose]
-based on MiniSat 2.0. Glucose was written by Gilles Audemard and Laurent Simon.
+The original Glucose via [the Glucose homepage,][glucose] based on MiniSat 2.0.
+Glucose is Copyright © 2009-2017 Gilles Audemard, Laurent Simon.
 
 ### [branch glucose-2.0][glu20]
 
@@ -132,38 +163,6 @@ There is an earlier version of 4.0 that is currently absent.
 ### [branch glucose-4.1][glu41]
 
 This is an incremental improvement over Glucose 4.0.
-
-### notes
-
-You can download any of the versions on GitHub by following the appropriate link
-and clicking on the green "Clone or download" link on the top right.
-Select "Download Zip" if you're not familiar with git.
-
-Note that the `build-all` script currently requires
-the entire git repository to be cloned.
-
-[homepage]: http://minisat.se/MiniSat.html
-[mp]: https://github.com/notwa/minisat/tree/master-patched
-[upstream]: https://github.com/niklasso/minisat/tree/master
-[patches]: https://github.com/notwa/minisat/tree/patches
-[v220]: https://github.com/notwa/minisat/tree/releases/2.2.0
-[v200]: https://github.com/notwa/minisat/tree/releases/2.0.0
-[comsps]: https://github.com/notwa/minisat/tree/COMiniSatPS
-[ms2glu]: https://github.com/notwa/minisat/tree/minisat-to-glucose
-[comsps_archive]: https://web.archive.org/web/20171023151341/http://www.cs.nyu.edu/~chanseok/cominisatps/
-[mcomsps]: https://github.com/notwa/minisat/tree/MapleCOMSPS
-[mlcmd]: https://github.com/notwa/minisat/tree/MapleLCMDist
-[mlcmdcbt]: https://github.com/notwa/minisat/tree/MapleLCMDistChronoBT
-[mlcmd_patch]: https://github.com/notwa/minisat/blob/patches/maple-fix-drup-segfault.patch
-[license_mit]: https://choosealicense.com/licenses/mit/
-[glucose]: https://www.labri.fr/perso/lsimon/glucose/
-[glu10]: https://github.com/notwa/minisat/tree/glucose-1.0
-[glu20]: https://github.com/notwa/minisat/tree/glucose-2.0
-[glu21]: https://github.com/notwa/minisat/tree/glucose-2.1
-[glu23]: https://github.com/notwa/minisat/tree/glucose-2.3
-[glu30]: https://github.com/notwa/minisat/tree/glucose-3.0
-[glu40]: https://github.com/notwa/minisat/tree/glucose-4.0
-[glu41]: https://github.com/notwa/minisat/tree/glucose-4.1
 
 ## Other Versions
 
