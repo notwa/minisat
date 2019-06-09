@@ -7,6 +7,14 @@ Copyright © 2003-2006 Niklas Eén, Copyright © 2003-2010 Niklas Sörensson,
 and distributed under the terms of [the MIT license.][license_mit]
 You may be wondering, [what is this?](#what-is-this)
 
+## Scripts
+
+* `build-all` — compiles and builds most of the versions here.
+This requires git and all of this repository's branches to be cloned.
+Note that only Linux is supported right now.
+
+* `check-all` — gathers information about the solvers in the `build` directory.
+
 ## Included Versions
 
 On the [master-patched branch,][mp] a version based on
