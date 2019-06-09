@@ -1,59 +1,146 @@
 # MiniSat etc.
 
-This repository contains various versions and derivatives of MiniSat
+This repository archives and restores
+various versions and derivatives of MiniSat
 written by various authors over the years.
 [The original MiniSat][homepage] is written and
 Copyright © 2003-2006 Niklas Eén, Copyright © 2003-2010 Niklas Sörensson,
 and distributed under the terms of [the MIT license.][license_mit]
-You may be wondering, [what is this?](#what-is-this)
+
+You may be wondering, [what is MiniSat? What is SAT?](#what-is-this)
 
 ## Scripts
 
 * `build-all` — compiles and builds most of the versions here.
 This requires git and all of this repository's branches to be cloned.
-Note that only Linux is supported right now.
+Note that only Linux is currently supported.
 
-* `check-all` — gathers information about the solvers in the `build` directory.
+* `check-all` — gathers information about the solvers
+  in the `build` directory created by `build-all`.
 
 ## Included Versions
 
-On the [master-patched branch,][mp] a version based on
-[Niklas's most recent work][upstream] is patched
-and ready to compile with modern compilers.
+### [branch master][mp]
 
-On the [patches branch,][patches] various patch files have been archived.
+This is just a clone of [the upstream master branch.][upstream]
 
-The ubiquitous [version 2.2.0 is available here,][v220]
-and the earlier [version 2.0 is available here.][v200]
-Earlier than that, a few select versions
-are available on [the MiniSat homepage.][homepage]
+### [branch master-patched][mp]
 
-On the [COMiniSatPS branch,][comsps] Chanseok Oh's patches have been applied
-to MiniSat 2.2.0. [Visit the COMiniSatPS homepage. (archived)][comsps_archive]
-On the [minisat-to-glucose branch,][ms2glu] Chanseok Oh's proof of concept
-patches have been applied to MiniSat 2.2.0.
+A version based on [Niklas's most recent work][upstream]
+is patched and ready to compile with modern compilers.
 
-On the [MapleCOMSPS,][mcomsps] [MapleLCMDist,][mlcmd]
-and [MapleLCMDistChronoBT][mlcmdcbt] branches, the winners
-of the main tracks of SAT Competitions 2016, 2017, and 2018 respectively
-have been applied to COMiniSatPS. Note that a patch is available to
+### [release 2.2.0][v220]
+
+This is the ubiquitous version of MiniSat
+that most of its derivatives are based on.
+
+### [release 2.0][v200]
+
+This is the first release of MiniSat 2
+that [glucose-1.0][glu10] is based on.
+
+### Earlier Releases
+
+A few select versions are available on [the MiniSat homepage.][homepage]
+
+### [branch patches][patches]
+
+Various patch files have been archived.
+Some of these are used for the build script.
+
+### [branch COMiniSatPS][comsps]
+
+[Chanseok Oh's patches][comsps_archive] have been applied to MiniSat 2.2.0,
+essentially turning it into [glucose-2.3.][glu23]
+
+### [branch minisat-to-glucose][ms2glu]
+
+Chanseok Oh's other set of patches have been applied to MiniSat 2.2.0,
+behaving similar to [glucose-2.3.][glu23]
+This serves as a starting point for MiniSat hack competitions,
+in which a limited edit distance is imposed.
+
+### [branch MapleCOMSPS][mcomsps]
+
+Ranking first on the main track of [the 2016 SAT Competition,][comp2016]
+this is based on COMiniSatPS.
+<!-- TODO: authors? -->
+
+### [branch MapleLCM][mlcm]
+
+This is based on MapleCOMSPS.
+<!-- TODO: authors? -->
+
+### [branch MapleLCMDist][mlcmd]
+
+Ranking first on the main track of [the 2017 SAT Competition,][comp2017]
+this is a variation of MapleLCM which is based on MapleCOMSPS.
+Note that a patch is available to
 [fix a crash in MapleLCMDist's DRUP-outputting code.][mlcmd_patch]
+<!-- TODO: authors? -->
 
-On the [glucose-1.0 branch,][glu10] the original glucose
-via [the glucose homepage][glucose] has been applied to MiniSat 2.0.
-Similarly, in the remaining glucose branches,
-the appropriate glucose versions have been applied to MiniSat 2.2.0:
-[glucose-2.0,][glu20]
-[glucose-2.1,][glu21]
-[glucose-3.0,][glu30]
-[glucose-4.0,][glu40] and
-[glucose-4.1.][glu41]
-Compared to the original releases, some unwanted files
-that had slipped in have been removed, and missing licenses have been restored.
+### [branch MapleLCMDistChronoBT][mlcmdcbt]
+
+Ranking first on the main track of [the 2018 SAT Competition,][comp2018]
+this is based on MapleLCMDist.
+<!-- TODO: authors? -->
+
+### [branch glucose-1.0][glu10]
+
+The original Glucose via [the Glucose homepage,][glucose]
+based on MiniSat 2.0. Glucose was written by Gilles Audemard and Laurent Simon.
+
+### [branch glucose-2.0][glu20]
+
+The next Glucose via [the Glucose homepage,][glucose]
+based on MiniSat 2.2.0.
+
+### [branch glucose-2.1][glu21]
+
+This is an update to glucose 2.0.
+Note that there is a crash specific to this version that has yet to be patched.
+
+### branch glucose-2.2
+
+This version is currently missing.
+It was removed from the Glucose homepage.
+
+### [branch glucose-2.3][glu23]
+
+This update to glucose 2.2 was later cleaned up and released as glucose 3.0.
+This version was [taken from the 2013 SAT Competition.](http://satcompetition.org/edacc/SATCompetition2013/experiment/22/solver-configurations/862)
+
+Note that this commit is currently missing from
+all subsequent branches of Glucose.
+
+### [branch glucose-3.0][glu30]
+
+This is a cleaned up version of Glucose 2.3,
+via [the Glucose homepage.][glucose]
+
+This version was used as a base for the Glucose Hack Track of
+[the 2016 SAT Competition.][comp2016]
+
+### [branch glucose-4.0][glu40]
+
+This version, also known as Glucose-Syrup,
+adds a parallel version of Glucose,
+plus some other improvements.
+
+There is an earlier version of 4.0 that is currently absent.
+
+### [branch glucose-4.1][glu41]
+
+This is an incremental improvement over Glucose 4.0.
+
+### notes
 
 You can download any of the versions on GitHub by following the appropriate link
 and clicking on the green "Clone or download" link on the top right.
 Select "Download Zip" if you're not familiar with git.
+
+Note that the `build-all` script currently requires
+the entire git repository to be cloned.
 
 [homepage]: http://minisat.se/MiniSat.html
 [mp]: https://github.com/notwa/minisat/tree/master-patched
@@ -73,6 +160,7 @@ Select "Download Zip" if you're not familiar with git.
 [glu10]: https://github.com/notwa/minisat/tree/glucose-1.0
 [glu20]: https://github.com/notwa/minisat/tree/glucose-2.0
 [glu21]: https://github.com/notwa/minisat/tree/glucose-2.1
+[glu23]: https://github.com/notwa/minisat/tree/glucose-2.3
 [glu30]: https://github.com/notwa/minisat/tree/glucose-3.0
 [glu40]: https://github.com/notwa/minisat/tree/glucose-4.0
 [glu41]: https://github.com/notwa/minisat/tree/glucose-4.1
