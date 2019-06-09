@@ -9,29 +9,29 @@ You may be wondering, [what is this?](#what-is-this)
 
 ## Included Versions
 
-In the [master-patched branch,][mp] a version based on
+On the [master-patched branch,][mp] a version based on
 [Niklas's most recent work][upstream] is patched
 and ready to compile with modern compilers.
 
-In the [patches branch,][patches] various patch files have been archived.
+On the [patches branch,][patches] various patch files have been archived.
 
 The ubiquitous [version 2.2.0 is available here,][v220]
 and the earlier [version 2.0 is available here.][v200]
 Earlier than that, a few select versions
 are available on [the MiniSat homepage.][homepage]
 
-In the [COMiniSatPS branch,][comsps] Chanseok Oh's patches have been applied
+On the [COMiniSatPS branch,][comsps] Chanseok Oh's patches have been applied
 to MiniSat 2.2.0. [Visit the COMiniSatPS homepage. (archived)][comsps_archive]
-In the [minisat-to-glucose branch,][ms2glu] Chanseok Oh's proof of concept
+On the [minisat-to-glucose branch,][ms2glu] Chanseok Oh's proof of concept
 patches have been applied to MiniSat 2.2.0.
 
-In the [MapleCOMSPS,][mcomsps] [MapleLCMDist,][mlcmd]
+On the [MapleCOMSPS,][mcomsps] [MapleLCMDist,][mlcmd]
 and [MapleLCMDistChronoBT][mlcmdcbt] branches, the winners
 of the main tracks of SAT Competitions 2016, 2017, and 2018 respectively
 have been applied to COMiniSatPS. Note that a patch is available to
 [fix a crash in MapleLCMDist's DRUP-outputting code.][mlcmd_patch]
 
-In the [glucose-1.0 branch,][glu10] the original glucose
+On the [glucose-1.0 branch,][glu10] the original glucose
 via [the glucose homepage][glucose] has been applied to MiniSat 2.0.
 Similarly, in the remaining glucose branches,
 the appropriate glucose versions have been applied to MiniSat 2.2.0:
