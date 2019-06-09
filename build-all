@@ -257,7 +257,7 @@ build-minisat-2.2.0
 build-minisat-master
 build-glucose-1.0
 build-glucose-2.0
-build-glucose-2.1
+#build-glucose-2.1 # currently broken
 build-glucose-3.0
 build-glucose-4.0
 build-glucose-4.1
