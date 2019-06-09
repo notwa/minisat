@@ -112,7 +112,7 @@ build-minisat-2.2.0() {
 }
 
 build-minisat-master() {
-    fetch minisat-master 37dc6c6
+    fetch minisat-master master
 
     apply-patch OpenBSD/patch-minisat_core_SolverTypes_h 0
     apply-patch OpenBSD/patch-minisat_core_Solver_cc 0
