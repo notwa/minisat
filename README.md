@@ -9,8 +9,9 @@ You may be wondering, [what is this?](#what-is-this)
 
 ## Included Versions
 
-In the [master branch,][master] a version based on [Niklas's most recent work][upstream]
-is patched and ready to compile with modern compilers.
+In the [master-patched branch,][mp] a version based on
+[Niklas's most recent work][upstream] is patched
+and ready to compile with modern compilers.
 
 In the [patches branch,][patches] various patch files have been archived.
 
@@ -47,7 +48,7 @@ and clicking on the green "Clone or download" link on the top right.
 Select "Download Zip" if you're not familiar with git.
 
 [homepage]: http://minisat.se/MiniSat.html
-[master]: https://github.com/notwa/minisat/tree/master
+[mp]: https://github.com/notwa/minisat/tree/master-patched
 [upstream]: https://github.com/niklasso/minisat/tree/master
 [patches]: https://github.com/notwa/minisat/tree/patches
 [v220]: https://github.com/notwa/minisat/tree/releases/2.2.0
