@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# print a TOML file describing functionality of the solvers.
+# see: https://github.com/toml-lang/toml
+
+trivially-satisfiable() {
+    echo 'p cnf 1 1'
+    echo '1 0'
+}
+
+trivially-unsatisfiable() {
+    echo 'p cnf 1 2'
+    echo '1 0'
+    echo '-1 0'
+}
+
+check-exit-codes() {
+    local solver="$1"
+    trivially-satisfiable | "$solver" >/dev/null 2>/dev/null
+    local sat=$?
+    trivially-unsatisfiable | "$solver" >/dev/null 2>/dev/null
+    local unsat=$?
+    printf "%s = %s\n" sat "$sat"
+    printf "%s = %s\n" unsat "$unsat"
+}
+
+check-outputs() {
+    local solver="$1"
+    local correct=0 # 1 if a line is "s SATISFIABLE" or "SATISFIABLE"
+    local noisy=0 # 1 if a line begins with a token that's not "c", "s", or "v"
+    local quiet=1 # 1 if no lines begin with a "c" token, independent of noisy
+    local malformed=0 # 1 if the "s" line is incorrect or has excess characters
+    local abiding=0 # 1 if a line begins with an "s" token
+    local demonstrative=0 # whether "v" lines are printed by default
+
+    while read -r line; do
+        local first_token="${line%% *}"
+        local remaining="${line#* }"
+
+        if [ "$first_token" = c ]; then
+            quiet=0
+        elif [ "$first_token" = s ]; then
+            abiding=1
+            if [ "$remaining" != SATISFIABLE ]; then
+                malformed=1
+            else
+                if [ "$correct" -eq 1 ]; then
+                    malformed=1 # solution output twice
+                else
+                    correct=1
+                fi
+            fi
+        elif [ "$first_token" = SATISFIABLE ]; then
+            if [ "$correct" -eq 1 ]; then
+                malformed=1 # solution output twice
+            else
+                correct=1
+            fi
+        elif [ "$first_token" = UNSATISFIABLE ]; then
+            correct=0
+            malformed=1
+        elif [ "$first_token" = v ]; then
+            demonstrative=1
+        else
+            noisy=1
+        fi
+    done < <(trivially-satisfiable | "$solver" 2>/dev/null)
+
+    printf "%s = %s\n" correct "$correct"
+    printf "%s = %s\n" noisy "$noisy"
+    printf "%s = %s\n" quiet "$quiet"
+    printf "%s = %s\n" abiding "$abiding"
+    printf "%s = %s\n" malformed "$malformed"
+    printf "%s = %s\n" demonstrative "$demonstrative"
+    #printf "%s_%s=%s\n" "$name" result "$result"
+}
+
+solvers=(
+    bin/*
+)
+
+for solver in "${solvers[@]}"; do
+    echo
+    name="${solver##*/}"
+    if expr index "$name" . >/dev/null; then
+        printf "[\"%s\"]\n" "$name" # name needs quoting
+    else
+        printf "[%s]\n" "$name"
+    fi
+    check-exit-codes "$solver"
+    check-outputs "$solver"
+done
