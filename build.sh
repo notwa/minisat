@@ -1,11 +1,9 @@
 #!/bin/bash
-export FM=$PWD/sources/SatELite/ForMani
 
-cd sources/SatELite/SatELite
-make r
-cp SatELite_release ../../..
+mkdir binary
 
-cd ../../glucose/core
+cd code/glucose2.3/simp
 make rs
-cp glucose_static ../../..
+cp glucose_static ../../../binary/glucose
+
  

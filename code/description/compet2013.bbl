@@ -1,0 +1,30 @@
+\begin{thebibliography}{}
+
+\bibitem[\protect\citeauthoryear{Audemard and Simon}{2009}]{AS-ijcai09}
+G.~Audemard and L.~Simon.
+\newblock Predicting learnt clauses quality in modern sat solvers.
+\newblock In {\em IJCAI}, 2009.
+
+\bibitem[\protect\citeauthoryear{E{\'e}n and S{\"o}rensson}{2003}]{minisat}
+N.~E{\'e}n and N.~S{\"o}rensson.
+\newblock An extensible {SAT}-solver.
+\newblock In {\em SAT}, pages 502--518, 2003.
+
+\bibitem[\protect\citeauthoryear{Moskewicz \bgroup \em et al.\egroup
+  }{2001}]{moskewicz01}
+M.~Moskewicz, C.~Madigan, Y.~Zhao, L.~Zhang, and S.~Malik.
+\newblock Chaff : Engineering an efficient {SAT} solver.
+\newblock In {\em DAC}, pages 530--535, 2001.
+
+\bibitem[\protect\citeauthoryear{Nabeshima \bgroup \em et al.\egroup
+  }{}]{glueminisat}
+Hidetomo Nabeshima, Koji Iwanuma, and Katsumi Inoue.
+\newblock Glueminisat2.2.5.
+\newblock In {\em SAT 2011 solvers descriptions}.
+
+\bibitem[\protect\citeauthoryear{Pipatsrisawat and Darwiche}{2007}]{rsat}
+K.~Pipatsrisawat and A.~Darwiche.
+\newblock A lightweight component caching scheme for satisfiability solvers.
+\newblock In {\em SAT}, pages 294--299, 2007.
+
+\end{thebibliography}

@@ -1,0 +1,258 @@
+%\typeout{We are the champions, again!}
+
+\documentclass[letterpaper]{article}
+\usepackage{ijcai09}
+\usepackage{theorem,float}
+%\usepackage[ruled]{algorithm2e}
+\usepackage{times,xspace}
+\usepackage{amssymb,amsmath}
+\usepackage[pdftex]{thumbpdf}
+\usepackage{graphicx}
+
+\newtheorem{definition}{Definition}
+\newtheorem{property}{Property}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+\newtheorem{example}{Example}
+
+\floatstyle{plain} %ruled plain, boxed
+\newfloat{Algorithm}{thp}{lop}
+\floatname{Algorithm}{Algorithm}
+
+\pdfinfo{
+/Title (Glucose 2.3 Competition Short Report)
+/Subject (Glucose 2.3 Competition Short Report)
+/Author (Gilles Audemard, CRIL, France and  Laurent Simon, LRI, France)
+/Keywords (Satisfiability, CDCL, nogoods)}
+
+
+
+\title{\textsc{glucose} 2.3:  Small improvements -- Too finish}
+%\thanks{supported by ANR UNLOC project ANR-08-BLAN-0289-01}}
+
+\author{Gilles Audemard\\
+Univ. Lille-Nord de France\\
+CRIL/CNRS UMR8188\\
+Lens, F-62307\\
+audemard@cril.fr\\
+\And
+Laurent Simon\\
+Univ. Paris-Sud\\
+LRI/CNRS UMR 8623 / INRIA Saclay\\
+Orsay, F-91405\\simon@lri.fr
+}
+
+
+%\author{Paper 233}
+%\\{\bf Keywords:} satisfiability, search algorithms, constraint satisfaction problems}
+
+\newcommand{\resolv}{\otimes}
+\newcommand{\gunsat}{\textsc{gunsat}\xspace}
+\newcommand{\proveRes}{\ensuremath{\vdash^1_{\text{Res}}}}
+\newcommand{\prove}{\ensuremath{\vdash}}
+\newcommand{\unsat}{\textsc{unsat}\xspace}
+\newcommand{\sat}{\textsc{sat}\xspace}
+\newcommand\DCL{\textsc{DCL}\xspace}
+\newcommand{\picosat}{\textsc{Picosat}\xspace}
+\newcommand{\rsat}{\textsc{Rsat}\xspace}
+\newcommand{\minisat}{\textsc{Minisat}\xspace}
+\newcommand{\minisatp}{\textsc{Minisat+}\xspace}
+
+\newcommand{\mdcl}{\textsc{Glucose}\xspace}
+\newcommand{\zchaf}{\textsc{zchaff}\xspace}
+\newcommand{\satelite}{\textsc{Satelite}\xspace}
+\begin{document}
+
+
+
+\maketitle
+
+\begin{abstract}
+
+  \mdcl is based on a the scoring scheme for clause learning mechanism
+ introduced in \cite{AS-ijcai09}. This short competition report
+  summarizes the techniques embedded in the SAT challenge 2013  version
+  of \mdcl\footnote{Web page {\tt\small
+    http:$\slash\slash$www.lri.fr$\slash$\~{}simon$\slash$glucose}}.
+\end{abstract}
+
+
+%%%%%%%%
+\section{Introduction}
+
+In the so-called ``modern'' SAT solvers \cite{moskewicz01,minisat}, a
+lot of effort has been put in the design of efficient Boolean
+Constraint Propagation (BCP), learning mechanisms, and branching
+heuristics, their three main composants. In \cite{AS-ijcai09}, a new
+simple measurement of learnt clause usefulness was introduced, called
+LBD. This measure was no more based on past clauses activities. It was
+proved so efficient that, this year, we improved the overall
+architecture of \mdcl 1.0 (used in the SAT 2009 competition) to
+incorporate an even more aggressive database cleanup policy. For this,
+we had to incorporate a simple auto-adaptative threshold point beyond
+of which clauses are deleted. We also incorporate a ``second chance''
+mechanism to keep bad clauses alive during one more round of database
+cleanings, if it shows any interesting improvement in its score.
+
+This new version of \mdcl is also based on the version 2.2 of \minisat
+\cite{minisat} (\mdcl 1.0 was based on the previous version of
+\minisat). For a more comprehensive description of \mdcl, please refer
+to \cite{AS-ijcai09} and our previous competition (2009, 2011, 2012) reports.
+%%%%%%%%
+\section{Literal Block Distance and Glue Clauses}
+
+During search, each decision is often followed by a large number of
+unit propagations. We called the set of all literals of the same level
+a ``blocks'' of literals. Intuitively, at the semantic level, there is
+a chance that they are linked with each other by direct
+dependencies. The underlying idea developed in \cite{AS-ijcai09} is
+that a good learning schema should add explicit links between
+independent blocks of propagated (or decision) literals. If the solver
+stays in the same search space, such a clause will probably help
+reducing the number of next decision levels in the remaining
+computation. Staying in the same search space is one of the recents
+behaviors of CDCL solvers, due to phase-saving \cite{rsat} and rapid
+restarts.
+
+\begin{definition}[Literals Blocks Distance (LBD)]
+  Given a clause $C$, and a partition of its literals into
+  $n$ subsets according to the current assignment, s.t. literals are
+  partitioned w.r.t their decision level. The LBD
+  of $C$ is exactly $n$.
+\end{definition}
+
+From a practical point of view, we compute and store the LBD score of
+each learnt clause when it is produced. Intuitively,
+it is easy to understand the importance of learnt clauses of LBD 2:
+they only contain one variable of the last decision level (they are
+FUIP), and, later, this variable will be ``glued'' with the block of
+literals propagated above, no matter the size of the clause. We
+suspect all those clauses to be very important during search, and we
+give them a special name: ``Glue Clauses''.
+
+
+%\subsection{Update dynamically LBD}
+The LBD measure can be easily re-computed on the fly when the clause
+is used during unit propagation. We keep here the strategy used in
+\mdcl 1.0: we change the LBD value of a clause only if the new value
+becomes smaller.
+
+
+
+\section{Agressive clauses deletion.. when possible}
+
+Before \mdcl 1.0, the state of the art was to let the clause database
+size follow a geometric progression (with a small common ratio of
+$1.1$ for instance in \minisat). Each time the limit is reached, the
+solver deleted at most half of the clauses, depending on their score
+(note that binary and glue clauses are never deleted).  In \mdcl 1.0,
+we already chose a very slow increasing strategy. In this new version,
+we perform a more accurate management of learnt clauses.
+
+\subsection{Dynamic threshold}
+% \begin{figure}
+% \centering
+%   \includegraphics[width=0.45\textwidth]{DBClause.pdf}
+% \caption{Evolution of the number of clauses kept in the database. The cleaning is very aggressive as soon as the LBD score can discreminate the set of clauses. Different scenarii are represented. When LBD score is good, when it is bad and when its quality changes.} \label{fig:database}
+% \end{figure}
+
+% As a basis, we wanted to use the following predicate to perform the
+% clean process: Every $4000 + 300\times x$, we remove at most half of
+% the learnt clause database (cleaning is performed at steps 4000, 8300,
+% 12600, 16900, ..., which this is much more agressive than the previous
+% one, {\em i.e.} $20000+500\times x$). Of course, binary clauses, glue clauses and
+% locked clauses are always kept. A locked clause is (1) used as a
+% reason for unit propagation in the current subtree or (2) locked for
+% the reasons explained below (see \ref{sec:locked}).
+
+% Due to its very agressive nature, the performance of \mdcl 2 now
+% heavily relies on the quality of the LBD scores. On many instances,
+% this score will give a very good indicator. However, on some
+% instances, we observed that it may not be discriminating enough (all
+% clauses may have a score between 2 and 3 for instance). We thus added
+% a very simple --~ but highly reactive~-- auto-adaptative strategy,
+% when we suspect the LBD score to be not informative enough. We
+% identified to special cases: if more than half of the clauses have a
+% low LBD score (less than 3), then we cannot really afford to throw
+% away a lot of clauses (all clauses of score 3 are equally good), and
+% we must accept to add more clauses to the database. In the same idea,
+% if we have only bad clauses (all clauses having a LBD score greater
+% than 5 in our current version), it is difficult to compare them, and
+% we have to keep many more clauses. However, as soon as the LBD score
+% is a good indicator, then we can delete a lot of clauses (the hard
+% part is behind us).
+
+% \subsection{Protect and lock promising clauses}\label{sec:locked}
+
+% The solver progresses during search. Thus, when a clause has its LBD
+% value that is suddenly decreasing, it could be bad to delete it. Thus,
+% each time a clause strictly decreases its LBD value, we protect it for
+% one cleaning round: it can not be deleted during the next clean
+% process.
+
+% \section{Other embedded techniques}
+
+% We also added a few particular features in \mdcl 2, built upon
+% \minisat 2.2 with a special handling of binary clauses, and the
+% phase-caching schema for variable selection polarity \cite{rsat}.
+
+% \subsection{Restarting when stalling}
+
+% Like in \mdcl 1.0, our restart strategy is based on the decreasing of
+% the number of decisions levels during search. If the decreasing is
+% stalling, then a restart is triggered. This is done by a moving
+% average over the last $50$ conflicts. If $0.8$ times this value is
+% greater than the global average, then a restart is forced (at least
+% 50 conflicts are needed before any restart). This strategy should
+% encourage the solver to keep searching at the right place, and to
+% escape from wrong places. Previous version of \mdcl uses different
+% constants. These new ones are provided by \textsc{glueminisat}
+% \cite{glueminisat} and
+% increase efficiency on UNSAT problems. 
+% %We also add a special trick (not yet
+% %published) to block restarts if we expected to be near a solution.
+
+% \subsection{Rewarding good  variables}
+
+% The state-of-the-art VSIDS \cite{moskewicz01} heuristic bumps all
+% variables which participated to the resolution steps conducting to the
+% assertive clause. This heuristic favors variables that are often and
+% recently used in conflict analysis. Since we want to help the solver
+% generate clauses with small LBD values, we reward a second time
+% variables that help to obtain such clauses. In details, we bump once
+% again all variables from the last decision level, which were used in
+% conflict analysis, but which were propagated by a clause of small LBD
+% (smaller than the new learnt clause).
+
+% \subsection{Reducing asserting clauses}
+
+% In \mdcl, binary clauses are stored separately. We use this special
+% data structure to reduce learnt clauses by means on resolutions with
+% binary clauses. For efficiency reasons, this process is not performed
+% for all clauses, but only for small ones, according to their size/LBD
+% (note that the bad clauses will be immediately deleted).
+
+% %%%%%%%%
+
+% \section{Conclusion}
+
+% Recent steps in the SAT research may look smaller and smaller. If
+% small steps are harder and harder to achieve, progresses are real and
+% significants. A detailed look at \mdcl 2 performances during the 2011
+% SAT Competition may give a new meaning of the overall learning
+% mechanism of CDCL solvers. Learning was firstly introduced for
+% completeness. But, if we study all \mdcl’s traces of the last
+% competition, phase 2, in the categories Applications and Crafted,
+% \mdcl 2 learnt 973,468,489 clauses (sum over all traces) but removed
+% 909,123,525 of them during computation, {\em i.e.} more than $93\%$ of
+% the clauses are removed before the end. Thus, one of the performance
+% keys of our solver is not only based on the identification of good
+% clauses, but also on the removing of bad ones. As a side effect, by
+% aggressively deleting those clauses, \mdcl increases the CDCL
+% incompleteness.
+
+\bibliography{good-learn}
+\bibliographystyle{named}
+
+\end{document}
+`

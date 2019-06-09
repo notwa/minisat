@@ -1,12 +1,6 @@
-#!/bin/bash
-export FM=$PWD/sources/SatElite/ForMani
-rm -rf glucose_static 
-rm -rf SatELite_release
+rm -rf binary
+cd code/glucose2.3/core
+make clean
+cd ../simp
+make clean
 
-cd sources/SatElite/SatELite
-make clean 
-
-cd ../../glucose/core
-make clean 
-
-find . -name 'depend.mak' -delete 
