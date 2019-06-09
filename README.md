@@ -16,7 +16,7 @@ This requires git and all of this repository's branches to be cloned.
 Note that only Linux is currently supported.
 
 * `check-all` — gathers information about the solvers
-  in the `build` directory created by `build-all`.
+  in the `bin` directory created by `build-all`.
 
 ## Included Versions
 
