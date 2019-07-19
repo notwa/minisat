@@ -2,13 +2,16 @@
 Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
 Copyright (c) 2007,      Niklas Sorensson
 
- Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
+Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
  
 Maple_LCM, Based on MapleCOMSPS_DRUP -- Copyright (c) 2017, Mao Luo, Chu-Min LI, Fan Xiao: implementing a learnt clause minimisation approach
 Reference: M. Luo, C.-M. Li, F. Xiao, F. Manya, and Z. L. , “An effective learnt clause minimization approach for cdcl sat solvers,” in IJCAI-2017, 2017, pp. to–appear.
- 
+
 Maple_LCM_Dist, Based on Maple_LCM -- Copyright (c) 2017, Fan Xiao, Chu-Min LI, Mao Luo: using a new branching heuristic called Distance at the beginning of search
- 
+
+MapleLCMDistChronoBT, based on Maple_LCM_Dist -- Copyright (c), Alexander Nadel, Vadim Ryvchin: "Chronological Backtracking" in SAT-2018, pp. 111-121.
+
+MapleLCMDistChronoBT-DL, based on MapleLCMDistChronoBT -- Copyright (c), Stepan Kochemazov, Oleg Zaikin, Victor Kondratiev, Alexander Semenov: The solver was augmented with heuristic that moves duplicate learnt clauses into the core/tier2 tiers depending on a number of parameters.
  
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -48,6 +51,8 @@ void printStats(Solver& solver)
     double cpu_time = cpuTime();
     double mem_used = memUsedPeak();
     printf("c restarts              : %"PRIu64"\n", solver.starts);
+    printf("c duplicate learnts_cnf : %"PRIu64"\n", solver.duplicates_added_conflicts);
+    printf("c duplicate learnts_min : %"PRIu64"\n", solver.duplicates_added_minimization);
     printf("c conflicts             : %-12"PRIu64"   (%.0f /sec)\n", solver.conflicts   , solver.conflicts   /cpu_time);
     printf("c decisions             : %-12"PRIu64"   (%4.2f %% random) (%.0f /sec)\n", solver.decisions, (float)solver.rnd_decisions*100 / (float)solver.decisions, solver.decisions   /cpu_time);
     printf("c propagations          : %-12"PRIu64"   (%.0f /sec)\n", solver.propagations, solver.propagations/cpu_time);
@@ -81,7 +86,7 @@ int main(int argc, char** argv)
 {
     try {
         setUsageHelp("USAGE: %s [options] <input-file> <result-output-file>\n\n  where input may be either in plain or gzipped DIMACS.\n");
-        printf("c This is MapleLCMDistChronoBT.\n");
+        printf("c This is MapleLCMDistChronoBT-DL.\n");
         
 #if defined(__linux__)
         fpu_control_t oldcw, newcw;

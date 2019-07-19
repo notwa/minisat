@@ -8,7 +8,11 @@ Maple_LCM, Based on MapleCOMSPS_DRUP -- Copyright (c) 2017, Mao Luo, Chu-Min LI,
 Reference: M. Luo, C.-M. Li, F. Xiao, F. Manya, and Z. L. , “An effective learnt clause minimization approach for cdcl sat solvers,” in IJCAI-2017, 2017, pp. to–appear.
 
 Maple_LCM_Dist, Based on Maple_LCM -- Copyright (c) 2017, Fan Xiao, Chu-Min LI, Mao Luo: using a new branching heuristic called Distance at the beginning of search
- 
+
+MapleLCMDistChronoBT, based on Maple_LCM_Dist -- Copyright (c), Alexander Nadel, Vadim Ryvchin: "Chronological Backtracking" in SAT-2018, pp. 111-121.
+
+MapleLCMDistChronoBT-DL, based on MapleLCMDistChronoBT -- Copyright (c), Stepan Kochemazov, Oleg Zaikin, Victor Kondratiev, Alexander Semenov: The solver was augmented with heuristic that moves duplicate learnt clauses into the core/tier2 tiers depending on a number of parameters.
+
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
 including without limitation the rights to use, copy, modify, merge, publish, distribute,
@@ -66,6 +70,13 @@ static DoubleOption  opt_garbage_frac      (_cat, "gc-frac",     "The fraction o
 static IntOption     opt_chrono            (_cat, "chrono",  "Controls if to perform chrono backtrack", 100, IntRange(-1, INT32_MAX));
 static IntOption     opt_conf_to_chrono    (_cat, "confl-to-chrono",  "Controls number of conflicts to perform chrono backtrack", 4000, IntRange(-1, INT32_MAX));
 
+static IntOption     opt_max_lbd_dup       ("DUP-LEARNTS", "lbd-limit",  "specifies the maximum lbd of learnts to be screened for duplicates.", 12, IntRange(0, INT32_MAX));
+static IntOption     opt_min_dupl_app      ("DUP-LEARNTS", "min-dup-app",  "specifies the minimum number of learnts to be included into db.", 3, IntRange(2, INT32_MAX));
+static IntOption     opt_dupl_db_init_size ("DUP-LEARNTS", "dupdb-init",  "specifies the initial maximal duplicates DB size.", 500000, IntRange(1, INT32_MAX));
+
+static IntOption     opt_VSIDS_props_limit ("DUP-LEARNTS", "VSIDS-lim",  "specifies the number of propagations after which the solver switches between LRB and VSIDS(in millions).", 30, IntRange(1, INT32_MAX));
+
+//VSIDS_props_limit
 
 //=================================================================================================
 // Constructor/Destructor:
@@ -93,6 +104,12 @@ Solver::Solver() :
   , garbage_frac     (opt_garbage_frac)
   , restart_first    (opt_restart_first)
   , restart_inc      (opt_restart_inc)
+
+
+  , min_number_of_learnts_copies(opt_min_dupl_app)  
+  , max_lbd_dup(opt_max_lbd_dup)
+  , dupl_db_init_size(opt_dupl_db_init_size)
+  , VSIDS_props_limit(opt_VSIDS_props_limit*1000000)
 
   // Parameters (the rest):
   //
@@ -122,7 +139,7 @@ Solver::Solver() :
   , progress_estimate  (0)
   , remove_satisfied   (true)
 
-  , core_lbd_cut       (3)
+  , core_lbd_cut       (2)
   , global_lbd_sum     (0)
   , lbd_queue          (50)
   , next_T2_reduce     (10000)
@@ -684,6 +701,47 @@ bool Solver::simplifyLearnt_core()
 
 }
 
+
+int Solver::is_duplicate(std::vector<uint32_t>&c){
+   auto time_point_0 = std::chrono::high_resolution_clock::now();
+    dupl_db_size++;
+    int res = 0;    
+    
+    int sz = c.size();
+    std::vector<uint32_t> tmp(c);    
+    sort(tmp.begin(),tmp.end());
+    
+    uint64_t hash = 0;    
+    
+    for (int i =0; i<sz; i++) {
+        hash ^= tmp[i] + 0x9e3779b9 + (hash << 6) + (hash>> 2);     
+    }    
+    
+    int32_t head = tmp[0];
+    auto it0 = ht.find(head);
+    if (it0 != ht.end()){
+        auto it1=ht[head].find(sz);
+        if (it1 != ht[head].end()){
+            auto it2 = ht[head][sz].find(hash);
+            if (it2 != ht[head][sz].end()){
+                it2->second++;
+                res = it2->second;            
+            }
+            else{
+                ht[head][sz][hash]=1;
+            }
+        }
+        else{            
+            ht[head][sz][hash]=1;
+        }
+    }else{        
+        ht[head][sz][hash]=1;
+    } 
+    auto time_point_1 = std::chrono::high_resolution_clock::now();
+    duptime += std::chrono::duration_cast<std::chrono::microseconds>(time_point_1-time_point_0);    
+    return res;
+}
+
 bool Solver::simplifyLearnt_tier2()
 {
     int beforeSize, afterSize;
@@ -787,22 +845,39 @@ bool Solver::simplifyLearnt_tier2()
 //#endif
                 }
                 else{
-                    attachClause(cr);
-                    learnts_tier2[cj++] = learnts_tier2[ci];
+                    
 
                     nblevels = computeLBD(c);
                     if (nblevels < c.lbd()){
                         //printf("lbd-before: %d, lbd-after: %d\n", c.lbd(), nblevels);
                         c.set_lbd(nblevels);
                     }
+                     //duplicate learnts 
+                    int id = 0;                    
+                    
+                    std::vector<uint32_t> tmp;
+                    for (int i = 0; i < c.size(); i++)                           
+                        tmp.push_back(c[i].x);
+                    id = is_duplicate(tmp);
+                     
+                                        
+                    //duplicate learnts 
 
-                    if (c.lbd() <= core_lbd_cut){
-                        cj--;
-                        learnts_core.push(cr);
-                        c.mark(CORE);
+                    if (id < min_number_of_learnts_copies+2){
+                        attachClause(cr);
+                        learnts_tier2[cj++] = learnts_tier2[ci];                    
+                        if (id == min_number_of_learnts_copies+1){                            
+                            duplicates_added_minimization++;                                  
+                        }
+                        if ((c.lbd() <= core_lbd_cut)||(id == min_number_of_learnts_copies+1)){
+                        //if (id == min_number_of_learnts_copies+1){
+                            cj--;
+                            learnts_core.push(cr);
+                            c.mark(CORE);
+                        }
+
+                        c.setSimplified(true);
                     }
-
-                    c.setSimplified(true);
                 }
             }
         }
@@ -1869,7 +1944,7 @@ lbool Solver::search(int& nof_conflicts)
                 if (step_size > min_step_size) step_size -= step_size_dec;
 
             conflicts++; nof_conflicts--;
-            if (conflicts == 100000 && learnts_core.size() < 100) core_lbd_cut = 5;
+            //if (conflicts == 100000 && learnts_core.size() < 100) core_lbd_cut = 5;
             ConflictData data = FindConflictLevel(confl);
             if (data.nHighestLevel == 0) return l_False;
             if (data.bOnlyOneLitFromHighest)
@@ -1909,10 +1984,26 @@ lbool Solver::search(int& nof_conflicts)
             }else{
                 CRef cr = ca.alloc(learnt_clause, true);
                 ca[cr].set_lbd(lbd);
-                if (lbd <= core_lbd_cut){
+                //duplicate learnts 
+                int  id = 0;
+                if (lbd <= max_lbd_dup){                        
+                    std::vector<uint32_t> tmp;
+                    for (int i = 0; i < learnt_clause.size(); i++)
+                        tmp.push_back(learnt_clause[i].x);
+                    id = is_duplicate(tmp);             
+                    if (id == min_number_of_learnts_copies +1){
+                        duplicates_added_conflicts++;                        
+                    }                    
+                    if (id == min_number_of_learnts_copies){
+                        duplicates_added_tier2++;
+                    }                                        
+                }
+                //duplicate learnts
+
+                if ((lbd <= core_lbd_cut) || (id == min_number_of_learnts_copies+1)){
                     learnts_core.push(cr);
                     ca[cr].mark(CORE);
-                }else if (lbd <= 6){
+                }else if ((lbd <= 6)||(id == min_number_of_learnts_copies)){
                     learnts_tier2.push(cr);
                     ca[cr].mark(TIER2);
                     ca[cr].touched() = conflicts;
@@ -2060,13 +2151,35 @@ static double luby(double y, int x){
 }
 
 static bool switch_mode = false;
-static void SIGALRM_switch(int signum) { switch_mode = true; }
+//static void SIGALRM_switch(int signum) { switch_mode = true; }
+
+uint32_t Solver::reduceduplicates(){
+    uint32_t removed_duplicates = 0;
+    std::vector<std::vector<uint64_t>> tmp;
+    //std::map<int32_t,std::map<uint32_t,std::unordered_map<uint64_t,uint32_t>>>  ht;
+    for (auto & outer_mp: ht){//variables
+        for (auto &inner_mp:outer_mp.second){//sizes
+            for (auto &in_in_mp: inner_mp.second){
+                if (in_in_mp.second >= 2){
+                //min_number_of_learnts_copies
+                    tmp.push_back({outer_mp.first,inner_mp.first,in_in_mp.first,in_in_mp.second});
+                }
+            }                    
+         }
+    }          
+    removed_duplicates = dupl_db_size-tmp.size();  
+    ht.clear();
+    for (auto i=0;i<tmp.size();i++){
+        ht[tmp[i][0]][tmp[i][1]][tmp[i][2]]=tmp[i][3];
+    }
+    return removed_duplicates;
+}
 
 // NOTE: assumptions passed in member-variable 'assumptions'.
 lbool Solver::solve_()
 {
-    signal(SIGALRM, SIGALRM_switch);
-    alarm(2500);
+    //signal(SIGALRM, SIGALRM_switch);
+    //alarm(2500);
 
     model.clear();
     conflict.clear();
@@ -2094,9 +2207,36 @@ lbool Solver::solve_()
         status = search(init);
     VSIDS = false;
 
+    duplicates_added_conflicts = 0;
+    duplicates_added_minimization=0;
+    duplicates_added_tier2 =0;    
+
+    dupl_db_size=0;
+    size_t dupl_db_size_limit = dupl_db_init_size;
+
     // Search:
     int curr_restarts = 0;
+    uint64_t curr_props = 0;
+    uint32_t removed_duplicates =0;
     while (status == l_Undef /*&& withinBudget()*/){
+        if (dupl_db_size >= dupl_db_size_limit){    
+            printf("c Duplicate learnts added (Minimization) %i\n",duplicates_added_minimization);    
+            printf("c Duplicate learnts added (conflicts) %i\n",duplicates_added_conflicts);    
+            printf("c Duplicate learnts added (tier2) %i\n",duplicates_added_tier2);    
+            printf("c Duptime: %i\n",duptime.count());
+            printf("c Number of conflicts: %i\n",conflicts);
+            printf("c Core size: %i\n",learnts_core.size());
+            
+            removed_duplicates = reduceduplicates();
+            dupl_db_size_limit*=1.1;
+            dupl_db_size -= removed_duplicates;
+            printf("c removed duplicates %i\n",removed_duplicates);
+        }   
+        if (propagations - curr_props >  VSIDS_props_limit){
+            curr_props = propagations;
+            switch_mode = true;
+            VSIDS_props_limit = VSIDS_props_limit + VSIDS_props_limit/10;
+        }     
         if (VSIDS){
             int weighted = INT32_MAX;
             status = search(weighted);
@@ -2105,9 +2245,16 @@ lbool Solver::solve_()
             curr_restarts++;
             status = search(nof_conflicts);
         }
-        if (!VSIDS && switch_mode){
-            VSIDS = true;
-            printf("c Switched to VSIDS.\n");
+        if (switch_mode){ 
+            switch_mode = false;
+            VSIDS = !VSIDS;
+            if (VSIDS){
+                printf("c Switched to VSIDS.\n");
+            }
+            else{
+               printf("c Switched to LRB.\n");
+            }
+            //            reduceduplicates();            
             fflush(stdout);
             picked.clear();
             conflicted.clear();

@@ -6,9 +6,12 @@ Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
  
 Maple_LCM, Based on MapleCOMSPS_DRUP -- Copyright (c) 2017, Mao Luo, Chu-Min LI, Fan Xiao: implementing a learnt clause minimisation approach
 Reference: M. Luo, C.-M. Li, F. Xiao, F. Manya, and Z. L. , “An effective learnt clause minimization approach for cdcl sat solvers,” in IJCAI-2017, 2017, pp. to–appear.
- 
+
 Maple_LCM_Dist, Based on Maple_LCM -- Copyright (c) 2017, Fan Xiao, Chu-Min LI, Mao Luo: using a new branching heuristic called Distance at the beginning of search
- 
+
+MapleLCMDistChronoBT, based on Maple_LCM_Dist -- Copyright (c), Alexander Nadel, Vadim Ryvchin: "Chronological Backtracking" in SAT-2018, pp. 111-121.
+
+MapleLCMDistChronoBT-DL, based on MapleLCMDistChronoBT -- Copyright (c), Stepan Kochemazov, Oleg Zaikin, Victor Kondratiev, Alexander Semenov: The solver was augmented with heuristic that moves duplicate learnt clauses into the core/tier2 tiers depending on a number of parameters.
  
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -46,6 +49,17 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "mtl/Alg.h"
 #include "utils/Options.h"
 #include "core/SolverTypes.h"
+
+
+// duplicate learnts version
+#include <chrono>
+#include <vector>
+#include <unordered_map>
+#include <unordered_set>
+#include <set>
+#include <map>
+#include <algorithm>
+// duplicate learnts version
 
 
 // Don't change the actual numbers.
@@ -188,11 +202,29 @@ public:
     int       learntsize_adjust_start_confl;
     double    learntsize_adjust_inc;
 
+
+    // duplicate learnts version
+    uint64_t       VSIDS_props_limit;
+    uint32_t       min_number_of_learnts_copies;    
+    uint32_t       dupl_db_init_size;
+    uint32_t       max_lbd_dup;
+    std::chrono::microseconds duptime;
+    // duplicate learnts version
+
     // Statistics: (read-only member variable)
     //
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts, conflicts_VSIDS;
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
     uint64_t chrono_backtrack, non_chrono_backtrack;
+
+
+    // duplicate learnts version
+    uint64_t duplicates_added_conflicts;
+    uint64_t duplicates_added_tier2;
+    uint64_t duplicates_added_minimization;    
+    uint64_t dupl_db_size;
+    
+    // duplicate learnts version
 
     vec<uint32_t> picked;
     vec<uint32_t> conflicted;
@@ -278,6 +310,11 @@ protected:
 
     ClauseAllocator     ca;
     
+    // duplicate learnts version    
+    std::map<int32_t,std::map<uint32_t,std::unordered_map<uint64_t,uint32_t>>>  ht;
+    uint32_t     reduceduplicates         ();         // Reduce the duplicates DB
+    // duplicate learnts version
+
     int 				confl_to_chrono;
     int 				chrono;
 
@@ -340,6 +377,10 @@ protected:
     bool     satisfied        (const Clause& c) const; // Returns TRUE if a clause is satisfied in the current state.
 
     void     relocAll         (ClauseAllocator& to);
+
+// duplicate learnts version
+    int     is_duplicate     (std::vector<uint32_t>&c); //returns TRUE if a clause is duplicate
+// duplicate learnts version
 
     // Misc:
     //
