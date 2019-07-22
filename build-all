@@ -92,6 +92,7 @@ fetch() {
 
 fetch-and-prepare() {
     fetch "$1" "$2"
+    apply-patch OpenBSD/patch-minisat_core_SolverTypes_h 1
     fix-literal-suffix
     replace-fpu_control-with-fenv
 }
@@ -156,12 +157,14 @@ build-glucose-1.0() {
 build-glucose-2.0() {
     fetch glucose-2.0
 
+    cd sources/glucose
+    apply-patch OpenBSD/patch-minisat_core_SolverTypes_h 1
     fix-literal-suffix
     fix-uint64-format
     replace-fpu_control-with-fenv
 
     # there's a simp directory, but it's not used for this version.
-    cd sources/glucose/core
+    cd core
     make rs
     cp glucose_static "$bin/glucose-2.0"
 }
@@ -169,12 +172,14 @@ build-glucose-2.0() {
 build-glucose-2.1() {
     fetch glucose-2.1
 
+    cd sources/glucose
+    apply-patch OpenBSD/patch-minisat_core_SolverTypes_h 1
     fix-literal-suffix
     fix-uint64-format
     replace-fpu_control-with-fenv
 
     # there's a simp directory, but it's not used for this version.
-    cd sources/glucose/core
+    cd core
     make rs
     cp glucose_static "$bin/glucose-2.1"
 }
@@ -186,12 +191,14 @@ build-glucose-3.0() {
 }
 
 build-glucose-4.0() {
-    fetch-and-prepare glucose-4.0
+    fetch glucose-4.0
+    replace-fpu_control-with-fenv
     build-and-install glucose-4.0
 }
 
 build-glucose-4.1() {
-    fetch-and-prepare glucose-4.1
+    fetch glucose-4.1
+    replace-fpu_control-with-fenv
     build-and-install glucose-4.1
 }
 
@@ -238,24 +245,32 @@ build-MapleLCM() {
 }
 
 build-MapleLCMDist() {
-    fetch-and-prepare MapleLCMDist
+    fetch MapleLCMDist
+    replace-fpu_control-with-fenv
+    fix-literal-suffix
     fix-drup-segfault
     build-and-install MapleLCMDist
 }
 
 build-MapleCM() {
-    fetch-and-prepare MapleCM
+    fetch MapleCM
+    replace-fpu_control-with-fenv
+    fix-literal-suffix
     fix-uint64-format
     build-and-install MapleCM
 }
 
 build-MapleLCMDistChronoBT() {
-    fetch-and-prepare MapleLCMDistChronoBT
+    fetch MapleLCMDistChronoBT
+    replace-fpu_control-with-fenv
+    fix-literal-suffix
     build-and-install MapleLCMDistChronoBT
 }
 
 build-MapleLCMDistChronoBTDLv3() {
-    fetch-and-prepare MapleLCMDistChronoBTDLv3
+    fetch MapleLCMDistChronoBTDLv3
+    replace-fpu_control-with-fenv
+    fix-literal-suffix
     fix-uint64-format
     build-and-install MapleLCMDistChronoBTDLv3
 }
@@ -269,6 +284,16 @@ flags=(
     -Wno-unused-but-set-variable
     -Werror=literal-suffix
 )
+
+if [[ "$CC" =~ clang* ]] || [[ "$CXX" =~ clang* ]]; then
+    flags+=(
+        -Wno-unknown-warning-option
+        -Wno-ignored-optimization-argument
+        -Wno-logical-op-parentheses
+        -Wno-dangling-else
+        -Wno-bitwise-op-parentheses
+    )
+fi
 
 mkdir -p "$bin"
 mkdir -p "$builds"
