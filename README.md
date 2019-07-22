@@ -38,6 +38,7 @@ Select "Download Zip" if you're not familiar with git.
 [mlcm]: https://github.com/notwa/minisat/tree/MapleLCM
 [mlcmd]: https://github.com/notwa/minisat/tree/MapleLCMDist
 [mlcmdcbt]: https://github.com/notwa/minisat/tree/MapleLCMDistChronoBT
+[mlcmdcbtdlv3]: https://github.com/notwa/minisat/tree/MapleLCMDistChronoBTDLv3
 [mlcmd_patch]: https://github.com/notwa/minisat/blob/patches/maple-fix-drup-segfault.patch
 [license_mit]: https://choosealicense.com/licenses/mit/
 [glucose]: https://www.labri.fr/perso/lsimon/glucose/
@@ -48,7 +49,6 @@ Select "Download Zip" if you're not familiar with git.
 [glu30]: https://github.com/notwa/minisat/tree/glucose-3.0
 [glu40]: https://github.com/notwa/minisat/tree/glucose-4.0
 [glu41]: https://github.com/notwa/minisat/tree/glucose-4.1
-
 
 ### [branch master][master]
 
@@ -115,6 +115,14 @@ Note that a patch is available to
 Ranking first on the main track of [the 2018 SAT Competition,][comp2018]
 this is based on MapleLCMDist.
 <!-- TODO: authors? -->
+
+### [branch MapleLCMDistChronoBTDLv3][mlcmdcbtdlv3]
+
+Ranking first in [the 2019 SAT Race,][race2019]
+this is based on MapleLCMDistChronoBT.
+<!-- TODO: authors? -->
+
+Note that this appears to be typo'd as MapleLCM**Disc** in the competition.
 
 ### [branch glucose-1.0][glu10]
 
@@ -193,8 +201,8 @@ but for the time being, there are:
 * [MiniSat derivatives from 2018][solvers2018]
   submitted to [the SAT Competition of 2018.][comp2018]
 
-* MiniSat derivatives will surely make an appearance in
-  [the upcoming (July) SAT Race of 2019.][race2019]
+* [MiniSat derivatives from 2019][solvers2019]
+  submitted to [the SAT Competition of 2019.][race2019]
 
 * and many more from the [various competitions and races][satcomp]
   held in the past and to be held in the future.
@@ -202,6 +210,7 @@ but for the time being, there are:
 [solvers2016]: https://baldur.iti.kit.edu/sat-competition-2016/solvers/
 [solvers2017]: https://baldur.iti.kit.edu/sat-competition-2017/solvers/
 [solvers2018]: http://sat2018.forsyte.tuwien.ac.at/solvers/
+[solvers2019]: http://sat-race-2019.ciirc.cvut.cz/solvers/
 [comp2016]: https://baldur.iti.kit.edu/sat-competition-2016/
 [comp2017]: https://baldur.iti.kit.edu/sat-competition-2017/
 [comp2018]: http://sat2018.forsyte.tuwien.ac.at/
