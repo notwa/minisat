@@ -202,7 +202,7 @@ but for the time being, there are:
   submitted to [the SAT Competition of 2018.][comp2018]
 
 * [MiniSat derivatives from 2019][solvers2019]
-  submitted to [the SAT Competition of 2019.][race2019]
+  submitted to [the SAT Race of 2019.][race2019]
 
 * and many more from the [various competitions and races][satcomp]
   held in the past and to be held in the future.
