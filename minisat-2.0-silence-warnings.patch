@@ -1,5 +1,5 @@
 diff --git a/minisat-2.0.orig/core/Main.C b/minisat-2.0/core/Main.C
-index ba7aab2..076a11f 100644
+index acef32c..4e3c7cd 100644
 --- a/minisat-2.0.orig/core/Main.C
 +++ b/minisat-2.0/core/Main.C
 @@ -21,6 +21,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
@@ -11,6 +11,15 @@ index ba7aab2..076a11f 100644
  
  #include <signal.h>
  #include <zlib.h>
+@@ -56,7 +58,7 @@ static inline int memReadStat(int field)
+     if (in == NULL) return 0;
+     int     value;
+     for (; field >= 0; field--)
+-        fscanf(in, "%d", &value);
++        if (fscanf(in, "%d", &value) != 1) break;
+     fclose(in);
+     return value;
+ }
 @@ -143,7 +145,7 @@ static void readClause(B& in, Solver& S, vec<Lit>& lits) {
  }
  
@@ -38,7 +47,7 @@ index ba7aab2..076a11f 100644
      reportf("CPU time              : %g s\n", cpu_time);
  }
 diff --git a/minisat-2.0.orig/core/Solver.C b/minisat-2.0/core/Solver.C
-index 567a02c..d066ef7 100644
+index 404f4da..d066ef7 100644
 --- a/minisat-2.0.orig/core/Solver.C
 +++ b/minisat-2.0/core/Solver.C
 @@ -553,8 +553,6 @@ lbool Solver::search(int nof_conflicts, int nof_learnts)
@@ -68,7 +77,7 @@ index 567a02c..d066ef7 100644
  
      reportf("Verified %d original clauses.\n", clauses.size());
 diff --git a/minisat-2.0.orig/simp/Main.C b/minisat-2.0/simp/Main.C
-index bbbdf4a..fd9abaf 100644
+index b6d1946..1ced3e5 100644
 --- a/minisat-2.0.orig/simp/Main.C
 +++ b/minisat-2.0/simp/Main.C
 @@ -21,6 +21,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
@@ -80,6 +89,15 @@ index bbbdf4a..fd9abaf 100644
  
  #include <signal.h>
  #include <zlib.h>
+@@ -56,7 +58,7 @@ static inline int memReadStat(int field)
+     if (in == NULL) return 0;
+     int     value;
+     for (; field >= 0; field--)
+-        fscanf(in, "%d", &value);
++        if (fscanf(in, "%d", &value) != 1) break;
+     fclose(in);
+     return value;
+ }
 @@ -144,7 +146,7 @@ static void readClause(B& in, SimpSolver& S, vec<Lit>& lits) {
  }
  
@@ -106,8 +124,17 @@ index bbbdf4a..fd9abaf 100644
      if (mem_used != 0) reportf("Memory used           : %.2f MB\n", mem_used / 1048576.0);
      reportf("CPU time              : %g s\n", cpu_time);
  }
+@@ -362,7 +364,7 @@ int main(int argc, char** argv)
+         FILE* in = fopen(freeze, "rb");
+         for(;;){
+             Var x;
+-            fscanf(in, "%d", &x);
++            if (fscanf(in, "%d", &x) != 1) break;
+             if (x == 0) break;
+             x--;
+ 
 diff --git a/minisat-2.0.orig/simp/SimpSolver.C b/minisat-2.0/simp/SimpSolver.C
-index ac291f1..82d1131 100644
+index 22121c3..82d1131 100644
 --- a/minisat-2.0.orig/simp/SimpSolver.C
 +++ b/minisat-2.0/simp/SimpSolver.C
 @@ -224,11 +224,12 @@ bool SimpSolver::merge(const Clause& _ps, const Clause& _qs, Var v, vec<Lit>& ou
