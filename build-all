@@ -49,6 +49,16 @@ fix-literal-suffix() {
     done
 }
 
+fix-uint64-format() {
+    find-code-files | while read -r file; do
+        sed -i \
+          -e 's/%ll[du]/%" PRIu64 "/g' \
+          -e 's/\(nbSimplifyAll         : \)%d/\1%" PRIu64 "/' \
+          -e 's/%i\(\\n",\(duplicates\|conflicts\|duptime\)\)/%" PRIu64 "\1/' \
+          "$file"
+    done
+}
+
 fix-Clause_new() {
     find-code-files | while read -r file; do
         sed -i \
@@ -147,6 +157,7 @@ build-glucose-2.0() {
     fetch glucose-2.0
 
     fix-literal-suffix
+    fix-uint64-format
     replace-fpu_control-with-fenv
 
     # there's a simp directory, but it's not used for this version.
@@ -159,6 +170,7 @@ build-glucose-2.1() {
     fetch glucose-2.1
 
     fix-literal-suffix
+    fix-uint64-format
     replace-fpu_control-with-fenv
 
     # there's a simp directory, but it's not used for this version.
@@ -169,6 +181,7 @@ build-glucose-2.1() {
 
 build-glucose-3.0() {
     fetch-and-prepare glucose-3.0
+    fix-uint64-format
     build-and-install glucose-3.0
 }
 
@@ -219,6 +232,7 @@ build-MapleCOMSPS() {
 
 build-MapleLCM() {
     fetch-and-prepare MapleLCM
+    fix-uint64-format
     fix-drup-segfault
     build-and-install MapleLCM
 }
@@ -231,6 +245,7 @@ build-MapleLCMDist() {
 
 build-MapleCM() {
     fetch-and-prepare MapleCM
+    fix-uint64-format
     build-and-install MapleCM
 }
 
@@ -241,6 +256,7 @@ build-MapleLCMDistChronoBT() {
 
 build-MapleLCMDistChronoBTDLv3() {
     fetch-and-prepare MapleLCMDistChronoBTDLv3
+    fix-uint64-format
     build-and-install MapleLCMDistChronoBTDLv3
 }
 
