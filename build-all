@@ -93,6 +93,12 @@ build-and-install() {
     cp *_static "$bin/$name"
 }
 
+build-common() {
+    local solver="$1"
+    fetch-and-prepare "$solver"
+    build-and-install "$solver"
+}
+
 build-minisat-2.0() {
     fetch minisat-2.0 minisat2-070721
 
@@ -233,6 +239,11 @@ build-MapleLCMDistChronoBT() {
     build-and-install MapleLCMDistChronoBT
 }
 
+build-MapleLCMDistChronoBTDLv3() {
+    fetch-and-prepare MapleLCMDistChronoBTDLv3
+    build-and-install MapleLCMDistChronoBTDLv3
+}
+
 root="$(readlink -f "$(dirname "$0")" )"
 bin="$root/bin"
 builds="$root/builds"
@@ -271,6 +282,7 @@ build-MapleLCM
 build-MapleLCMDist
 build-MapleCM
 build-MapleLCMDistChronoBT
+build-MapleLCMDistChronoBTDLv3
 
 cd "$root"
 
