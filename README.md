@@ -248,6 +248,8 @@ under many names such as [COMSPS,][comsps_archive] [Glucose,][glucose]
 There are solvers that are not based on MiniSat.
 For example, [PicoSAT][picosat] and [yices,][yices]
 the latter being an SMT solver.
+[CaDiCaL][cadical] is another solver from the authors of PicoSAT
+with highly competitive performance.
 
 [SAT]: https://en.wikipedia.org/wiki/Boolean_satisfiability_problem#Algorithms_for_solving_SAT
 [BSP]: https://en.wikipedia.org/wiki/Boolean_satisfiability_problem
@@ -259,3 +261,4 @@ the latter being an SMT solver.
 [satlib]: https://www.cs.ubc.ca/~hoos/SATLIB/
 [picosat]: http://fmv.jku.at/picosat/
 [yices]: http://yices.csl.sri.com/
+[cadical]: https://github.com/arminbiere/cadical
