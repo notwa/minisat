@@ -59,6 +59,12 @@ fix-uint64-format() {
     done
 }
 
+fix-narrowing() {
+    find-code-files | while read -r file; do
+        sed -i -e 's/outer_mp.first,/static_cast<uint32_t>(outer_mp.first),/g' "$file"
+    done
+}
+
 fix-Clause_new() {
     find-code-files | while read -r file; do
         sed -i \
@@ -272,6 +278,7 @@ build-MapleLCMDistChronoBTDLv3() {
     replace-fpu_control-with-fenv
     fix-literal-suffix
     fix-uint64-format
+    fix-narrowing
     build-and-install MapleLCMDistChronoBTDLv3
 }
 
