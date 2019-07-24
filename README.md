@@ -12,7 +12,8 @@ You may be wondering, [what is MiniSat? What is SAT?](#what-is-this)
 ## Scripts
 
 * `build-all` — compiles and builds most of the versions here.
-This requires git and all of this repository's branches to be cloned.
+This requires git and all of this repository's branches to be cloned
+— an ordinary `git clone https://github.com/notwa/minisat/` will suffice.
 Note that only Linux is currently supported.
 
 * `check-all` — gathers information about the solvers
