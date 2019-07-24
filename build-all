@@ -4,7 +4,7 @@ set -e
 
 check-git() {
     bad=0
-    if ! which git >/dev/null 2>/dev/null; then
+    if ! which git >/dev/null 2>&1; then
         echo 'this script requires git' >&2
         bad=1
     fi
@@ -19,6 +19,13 @@ check-git() {
 
     if [ $bad -eq 1 ]; then
         exit 1
+    fi
+}
+
+track-branch() {
+    if ! git show-ref --quiet "refs/heads/$1"; then
+        echo
+        git branch --track "$1" "origin/$1"
     fi
 }
 
@@ -130,13 +137,8 @@ build-and-install() {
     cp *_static "$bin/$name"
 }
 
-build-common() {
-    local solver="$1"
-    fetch-and-prepare "$solver"
-    build-and-install "$solver"
-}
-
 build-minisat-2.0() {
+    track-branch minisat2-070721
     fetch minisat-2.0 minisat2-070721
 
     apply-patch minisat-2.0-silence-warnings.patch 2
@@ -150,11 +152,13 @@ build-minisat-2.0() {
 }
 
 build-minisat-2.2.0() {
+    track-branch minisat-2.2.0
     fetch-and-prepare minisat-2.2.0
     build-and-install minisat-2.2.0
 }
 
 build-minisat-master() {
+    track-branch master
     fetch minisat-master master
 
     apply-patch OpenBSD/patch-minisat_core_SolverTypes_h 0
@@ -168,6 +172,7 @@ build-minisat-master() {
 }
 
 build-glucose-1.0() {
+    track-branch glucose-1.0
     fetch glucose-1.0
 
     apply-patch glucose-1.0-silence-warnings.patch 2
@@ -181,6 +186,7 @@ build-glucose-1.0() {
 }
 
 build-glucose-2.0() {
+    track-branch glucose-2.0
     fetch glucose-2.0
 
     cd sources/glucose
@@ -196,6 +202,7 @@ build-glucose-2.0() {
 }
 
 build-glucose-2.1() {
+    track-branch glucose-2.1
     fetch glucose-2.1
 
     cd sources/glucose
@@ -211,24 +218,28 @@ build-glucose-2.1() {
 }
 
 build-glucose-3.0() {
+    track-branch glucose-3.0
     fetch-and-prepare glucose-3.0
     fix-uint64-format
     build-and-install glucose-3.0
 }
 
 build-glucose-4.0() {
+    track-branch glucose-4.0
     fetch glucose-4.0
     replace-fpu_control-with-fenv
     build-and-install glucose-4.0
 }
 
 build-glucose-4.1() {
+    track-branch glucose-4.1
     fetch glucose-4.1
     replace-fpu_control-with-fenv
     build-and-install glucose-4.1
 }
 
 build-minisat-to-glucose() {
+    track-branch minisat-2.2.0
     fetch-and-prepare minisat-to-glucose minisat-2.2.0
     apply-patch COMiniSatPS/minisat-2.2.0-to-glucose.patch
     apply-patch COMiniSatPS/binary-watches.patch
@@ -236,12 +247,14 @@ build-minisat-to-glucose() {
 }
 
 build-COMiniSatPS-01() {
+    track-branch minisat-2.2.0
     fetch-and-prepare COMiniSatPS-01 minisat-2.2.0
     apply-patch COMiniSatPS/01_minisat2glucoseSC13.patch
     build-and-install COMiniSatPS-01
 }
 
 build-COMiniSatPS-02() {
+    track-branch minisat-2.2.0
     fetch-and-prepare COMiniSatPS-02 minisat-2.2.0
     apply-patch COMiniSatPS/01_minisat2glucoseSC13.patch
     apply-patch COMiniSatPS/02_SWDiA5BY_SC14.patch
@@ -249,21 +262,25 @@ build-COMiniSatPS-02() {
 }
 
 build-COMiniSatPS-2015() {
+    track-branch COMiniSatPS
     fetch-and-prepare COMiniSatPS-2015 15fabea
     build-and-install COMiniSatPS-2015
 }
 
 build-COMiniSatPS-2016() {
+    track-branch COMiniSatPS
     fetch-and-prepare COMiniSatPS-2016 e2642bb
     build-and-install COMiniSatPS-2016
 }
 
 build-MapleCOMSPS() {
+    track-branch MapleCOMSPS
     fetch-and-prepare MapleCOMSPS
     build-and-install MapleCOMSPS
 }
 
 build-MapleLCM() {
+    track-branch MapleLCM
     fetch-and-prepare MapleLCM
     fix-uint64-format
     fix-drup-segfault
@@ -271,6 +288,7 @@ build-MapleLCM() {
 }
 
 build-MapleLCMDist() {
+    track-branch MapleLCMDist
     fetch MapleLCMDist
     replace-fpu_control-with-fenv
     fix-literal-suffix
@@ -279,6 +297,7 @@ build-MapleLCMDist() {
 }
 
 build-MapleCM() {
+    track-branch MapleCM
     fetch MapleCM
     replace-fpu_control-with-fenv
     fix-literal-suffix
@@ -287,6 +306,7 @@ build-MapleCM() {
 }
 
 build-MapleLCMDistChronoBT() {
+    track-branch MapleLCMDistChronoBT
     fetch MapleLCMDistChronoBT
     replace-fpu_control-with-fenv
     fix-literal-suffix
@@ -294,6 +314,7 @@ build-MapleLCMDistChronoBT() {
 }
 
 build-MapleLCMDistChronoBTDLv3() {
+    track-branch MapleLCMDistChronoBTDLv3
     fetch MapleLCMDistChronoBTDLv3
     replace-fpu_control-with-fenv
     fix-literal-suffix
@@ -332,6 +353,8 @@ MINISAT_2_0_CFLAGS="-I../mtl -I../core -Wall -ffloat-store -O3 -D NDEBUG"
 export MROOT=../
 export CXXFLAGS="${flags[@]}"
 export CFLAGS="${flags[@]}"
+
+track-branch patches
 
 build-minisat-2.0
 build-minisat-2.2.0
