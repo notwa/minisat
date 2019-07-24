@@ -61,12 +61,33 @@ find-code-files() {
 replace-fpu_control-with-fenv() {
     # fpu_control.h is not available on all systems. fenv.h is more common.
     find-code-files | while read -r file; do
-        sed -i \
+        sed \
           -e 's/fpu_control.h/fenv.h/g' \
           -e 's/fpu_control_t oldcw, newcw;/fenv_t fenv;/g' \
           -e 's/_FPU_GETCW.*/fegetenv(\&fenv); fenv.__control_word \&= ~0x300; fenv.__control_word |= 0x200; fesetenv(\&fenv);/g' \
-          -e 's/.*defined(_FPU_EXTENDED).*/#ifdef __linux__/' \
-          "$file"
+          -e 's/.*defined(_FPU_EXTENDED).*/#if defined(__linux__)/' \
+          < "$file" > "$file.temp"
+
+        # replace the check for Linux with a check for x86/x64 processors.
+        # this allows for compilation on ARM. it also enables it on Windows.
+        awk '
+/__linux__/ {
+    L = $0
+}
+
+/fenv\.h|fenv_t|FPU precision on Linux/ {
+    if (L) print "#if defined(__i386__) || defined(__x86_64__)"
+    L = 0
+}
+
+!/__linux__/ {
+    if (L) print L
+    print $0
+    L = 0
+}
+' < "$file.temp" > "$file"
+
+        rm "$file.temp"
     done
 }
 
@@ -339,9 +360,9 @@ if [[ "$CC" =~ clang* ]] || [[ "$CXX" =~ clang* ]]; then
     flags+=(
         -Wno-unknown-warning-option
         -Wno-ignored-optimization-argument
+        -Wno-bitwise-op-parentheses
         -Wno-logical-op-parentheses
         -Wno-dangling-else
-        -Wno-bitwise-op-parentheses
     )
 fi
 
