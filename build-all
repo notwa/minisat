@@ -2,6 +2,26 @@
 
 set -e
 
+check-git() {
+    bad=0
+    if ! which git >/dev/null 2>/dev/null; then
+        echo 'this script requires git' >&2
+        bad=1
+    fi
+
+    if [ ! -d "$1/.git" ]; then
+        if [ $bad -eq 1 ]; then
+            echo -n 'in addition, '
+        fi
+        echo 'this script requires a git clone of https://github.com/notwa/minisat' >&2
+        bad=1
+    fi
+
+    if [ $bad -eq 1 ]; then
+        exit 1
+    fi
+}
+
 retrieve-patch() {
     local patch="$1"
     if [ -e "$patch" ]; then
@@ -285,6 +305,8 @@ build-MapleLCMDistChronoBTDLv3() {
 root="$(readlink -f "$(dirname "$0")" )"
 bin="$root/bin"
 builds="$root/builds"
+
+check-git "$root"
 
 flags=(
     -Wno-misleading-indentation
