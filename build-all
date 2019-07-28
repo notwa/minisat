@@ -398,6 +398,4 @@ build-MapleCM
 build-MapleLCMDistChronoBT
 build-MapleLCMDistChronoBTDLv3
 
-cd "$root"
-
 strip-symbols "$bin"/*
